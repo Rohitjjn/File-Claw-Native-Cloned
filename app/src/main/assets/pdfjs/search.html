@@ -1,0 +1,1070 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=8, user-scalable=yes">
+  <title>File Claw PDF Reader</title>
+  <style>
+    /* Loop 14: PDF is ALWAYS light mode. The dark palette, the invert/natural page
+       classifier and every night-mode CSS rule were removed — the viewer keeps the
+       original light look no matter what the system or in-app theme says. */
+    :root {
+      color-scheme: light;
+      --reader-background: #f0f0f0;
+      --page-background: #ffffff;
+      --page-shadow: 0 4px 20px rgba(0, 0, 0, .14);
+      --page-border: rgba(25, 25, 25, .10);
+    }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; min-height: 100%; margin: 0; }
+    body {
+      overflow: auto;
+      background: var(--reader-background);
+      -webkit-text-size-adjust: 100%;
+      overscroll-behavior: contain;
+    }
+    #pdf-document {
+      display: flex;
+      min-height: 100vh;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      padding: 12px 10px 32px;
+    }
+    .pdf-page {
+      position: relative;
+      flex: 0 0 auto;
+      overflow: hidden;
+      background: var(--page-background);
+      border: 1px solid var(--page-border);
+      box-shadow: var(--page-shadow);
+      border-radius: 12px;
+      transform-origin: top center;
+    }
+    .pdf-page canvas {
+      display: block;
+      max-width: none;
+      background: white;
+      border-radius: 12px;
+    }
+    .highlight-layer {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      pointer-events: none;
+      border-radius: 12px;
+    }
+    .pdf-search-highlight {
+      position: absolute;
+      min-width: 2px;
+      background: rgba(204, 120, 92, .48);
+      border-radius: 2px;
+      box-shadow: inset 0 0 0 1px rgba(122, 61, 40, .25);
+    }
+    .pdf-search-highlight.active {
+      background: rgba(232, 165, 90, .82);
+      outline: 2px solid rgba(204, 120, 92, .95);
+      z-index: 2;
+    }
+    /* Rounded page skeleton with soft shimmer */
+    .pdf-page.skeleton {
+      border-radius: 12px;
+    }
+    .pdf-page.skeleton::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 12px;
+      background: linear-gradient(100deg,
+        rgba(25, 25, 25, 0) 30%,
+        rgba(25, 25, 25, 0.08) 50%,
+        rgba(25, 25, 25, 0) 70%);
+      animation: pdf-skeleton-pulse 1.4s ease-in-out infinite;
+      pointer-events: none;
+    }
+    @keyframes pdf-skeleton-pulse {
+      0% { transform: translateX(-60%); }
+      100% { transform: translateX(60%); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .pdf-page.skeleton::after { animation: none; }
+    }
+    /* Loop 12 (Bug C): per-page render failure recovery. A failed page used to stay
+       permanently blank until the user scrolled far enough away and back. */
+    .page-failure {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      background: var(--page-background);
+      color: #8a8a8a;
+      font: 13px/1.5 sans-serif;
+      text-align: center;
+      padding: 24px;
+      box-sizing: border-box;
+      z-index: 3;
+    }
+    .page-failure button {
+      padding: 8px 18px;
+      border-radius: 8px;
+      border: 1px solid rgba(25, 25, 25, .2);
+      background: rgba(204, 120, 92, .14);
+      color: #a9583e;
+      font: 600 13px sans-serif;
+    }
+  </style>
+</head>
+<body>
+  <main id="pdf-document" aria-label="PDF document"></main>
+  <script>
+    window.addEventListener('error', function (event) {
+      if (window.Android && window.Android.onPdfError && event && event.message) {
+        window.Android.onPdfError(String(event.message));
+      }
+    });
+  </script>
+  <script type="module">
+    import * as pdfjsLib from './pdf.min.mjs';
+
+    const assetBase = '/assets/pdfjs/';
+    const pdfUrl = '/search-pdf/document.pdf';
+    const maxStoredMatches = 2000;
+    const maxRectsPerMatch = 24;
+    // v1.3.0: hi-DPI aware rasterization budget. Each rendered page backs at most
+    // ~pagePixelBudget device pixels, but the ratio now SCALES WITH THE PINCH ZOOM so
+    // zoomed pages stay crisp instead of magnifying a fixed-resolution bitmap.
+    // Loop 10: Android pushes a device-tiered value via setPdfQualityBudget().
+    // Loop 12: the argument is now the TOTAL RGBA budget across simultaneously
+    // resident canvases (mirrors PdfRenderBudgetPolicy.totalCanvasBytes); the per-page
+    // budget is derived from it so aggregate canvas memory stays bounded. A fixed
+    // per-page number ignored that 3-5 pages are resident at once inside the
+    // IntersectionObserver prefetch window — the main reason heavy PDFs struggled.
+    let pagePixelBudget = 12.0e6;
+    // Loop 10 raised this from 6 to 8 with the device-tiered budget; Loop 14 keeps 8.
+    const maxRenderRatio = 8;
+    // Mirrors PdfRenderBudgetPolicy.RESIDENT_PAGE_WINDOW / BYTES_PER_PIXEL.
+    const residentPageWindow = 3;
+    const bytesPerPixel = 4;
+    const minPagePixelBudget = 4.0e6;
+    const maxPagePixelBudget = 24.0e6;
+    // Mirrors PdfCanvasDimensionPolicy: exceeding these limits makes Chromium silently
+    // ignore all draw commands (permanently blank canvas), so oversized pages are
+    // downsampled below ratio 1 instead of rendering blank.
+    const maxCanvasDimensionPx = 8192;
+    const minRenderRatio = 0.05;
+    let renderScaleHint = 1;
+    pdfjsLib.GlobalWorkerOptions.workerSrc = assetBase + 'pdf.worker.min.mjs';
+
+    let pdfDocument = null;
+    let loadingPromise = null;
+    let passwordUpdater = null;
+    let indexedPages = new Map();
+    // Loop 12 (Bug C): bounded retention for extracted page text. Keeping every
+    // searched page's full text + piece geometry alive duplicated the document in
+    // memory for the lifetime of the viewer.
+    const indexedPageLimit = 128;
+    const indexedLruOrder = [];
+    let pageRecords = [];
+    let searchMatches = [];
+    let activeMatchIndex = -1;
+    let latestRequestId = 0;
+    let currentZoom = 1;
+    let pageObserver = null;
+    let currentPage = 0;
+    // Loop 14: PDF view rotation in degrees clockwise (0/90/180/270), driven from
+    // Android via setPageRotation(). Pure viewer state — rotating NEVER reloads the
+    // document, recreates the WebView or re-runs the password flow: pages are
+    // re-rendered from the already-authenticated PDF.js document object.
+    let pageRotation = 0;
+
+    function bridgeCall(name, ...args) {
+      try {
+        if (window.Android && typeof window.Android[name] === 'function') {
+          window.Android[name](...args);
+        }
+      } catch (error) {
+        console.error('File Claw PDF bridge failed', error);
+      }
+    }
+
+    function publishResults(payload) {
+      bridgeCall('onPdfSearchResults', JSON.stringify(payload));
+    }
+
+    function publishError(requestId, query, error) {
+      if (requestId !== latestRequestId) return;
+      bridgeCall('onPdfSearchError', JSON.stringify({
+        requestId: requestId,
+        query: query,
+        message: String(error && (error.message || error) || 'PDF text search failed')
+      }));
+    }
+
+    function escapeRegExp(value) {
+      return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    function shouldInsertSpace(previous, current) {
+      if (!previous || previous.hasEOL || /\s$/.test(previous.str) || /^\s/.test(current.str)) return false;
+      const previousTransform = previous.transform;
+      const nextTransform = current.transform;
+      if (!previousTransform || !nextTransform) return false;
+      const sameLine = Math.abs(previousTransform[5] - nextTransform[5]) <= Math.max(previous.height, current.height, 1) * 0.45;
+      if (!sameLine) return true;
+      const gap = nextTransform[4] - (previousTransform[4] + previous.width);
+      return gap > Math.max(previous.height, current.height, 1) * 0.16;
+    }
+
+    async function getIndexedPage(pageNumber) {
+      const cached = indexedPages.get(pageNumber);
+      if (cached) {
+        // Touch: keep recently used pages at the back of the eviction order.
+        const position = indexedLruOrder.indexOf(pageNumber);
+        if (position >= 0 && position !== indexedLruOrder.length - 1) {
+          indexedLruOrder.splice(position, 1);
+          indexedLruOrder.push(pageNumber);
+        }
+        return cached;
+      }
+      const page = await pdfDocument.getPage(pageNumber);
+      const viewport = page.getViewport({ scale: 1 });
+      const textContent = await page.getTextContent();
+      const pieces = [];
+      let fullText = '';
+      let previous = null;
+
+      for (const item of textContent.items) {
+        if (!item || typeof item.str !== 'string' || item.str.length === 0) continue;
+        const entry = {
+          str: item.str,
+          transform: item.transform,
+          width: Math.abs(Number(item.width) || 0),
+          height: Math.abs(Number(item.height) || 0),
+          hasEOL: Boolean(item.hasEOL),
+          start: 0,
+          end: 0
+        };
+        if (previous && previous.hasEOL) fullText += '\n';
+        else if (shouldInsertSpace(previous, entry)) fullText += ' ';
+        entry.start = fullText.length;
+        fullText += entry.str;
+        entry.end = fullText.length;
+        pieces.push(entry);
+        previous = entry;
+      }
+
+      const result = { text: fullText, pieces: pieces, viewport: viewport };
+      indexedPages.set(pageNumber, result);
+      indexedLruOrder.push(pageNumber);
+      while (indexedLruOrder.length > indexedPageLimit) {
+        const oldest = indexedLruOrder.shift();
+        if (oldest !== pageNumber) indexedPages.delete(oldest);
+      }
+      return result;
+    }
+
+    function makeRect(page, piece, localStart, localEnd) {
+      const viewport = page.viewport;
+      const transform = pdfjsLib.Util.transform(viewport.transform, piece.transform);
+      const fontHeight = Math.max(Math.hypot(transform[2], transform[3]), piece.height, 1);
+      const startFraction = piece.str.length > 0 ? localStart / piece.str.length : 0;
+      const endFraction = piece.str.length > 0 ? localEnd / piece.str.length : 1;
+      const direction = transform[0] < 0 ? -1 : 1;
+      const x1 = transform[4] + direction * piece.width * startFraction;
+      const x2 = transform[4] + direction * piece.width * endFraction;
+      const left = Math.min(x1, x2);
+      const right = Math.max(x1, x2);
+      const top = transform[5] - fontHeight;
+      const bottom = transform[5] + Math.max(1, fontHeight * .18);
+      const unrotated = {
+        left: Math.max(0, Math.min(1, left / viewport.width)),
+        top: Math.max(0, Math.min(1, top / viewport.height)),
+        right: Math.max(0, Math.min(1, right / viewport.width)),
+        bottom: Math.max(0, Math.min(1, bottom / viewport.height))
+      };
+      // Loop 14: rects are stored in UNROTATED page space; drawHighlights maps them
+      // into the current display orientation on every draw, so highlights follow
+      // the text through rotation without re-searching (PdfRotationPolicy.rotateRect
+      // mirrors this mapping in the tested Kotlin policy).
+      return unrotated;
+    }
+
+    function rotateNormRect(rect, degrees) {
+      const rotation = ((Math.round(degrees) % 360) + 360) % 360;
+      if (rotation === 0) return rect;
+      if (rotation === 90) {
+        return {
+          left: 1 - rect.bottom, top: rect.left,
+          right: 1 - rect.top, bottom: rect.right
+        };
+      }
+      if (rotation === 180) {
+        return {
+          left: 1 - rect.right, top: 1 - rect.bottom,
+          right: 1 - rect.left, bottom: 1 - rect.top
+        };
+      }
+      if (rotation === 270) {
+        return {
+          left: rect.top, top: 1 - rect.right,
+          right: rect.bottom, bottom: 1 - rect.left
+        };
+      }
+      return rect;
+    }
+
+    function computePageScale(baseWidth) {
+      const availableWidth = Math.max(240, (window.innerWidth || document.documentElement.clientWidth || 360) - 24);
+      return Math.max(.1, Math.min(availableWidth / Math.max(1, baseWidth), 2.5)) * currentZoom;
+    }
+
+    // Loop 14: fit scale must use the ROTATED base width, otherwise quarter-turn
+    // pages are fit against the wrong axis and overflow horizontally.
+    function rotatedBaseWidth(baseWidth, baseHeight) {
+      return (pageRotation % 180 === 90) ? baseHeight : baseWidth;
+    }
+
+    function pageScale(page) {
+      const base = page.getViewport({ scale: 1 });
+      return computePageScale(rotatedBaseWidth(base.width, base.height));
+    }
+
+    // Loop 12 (Bug C): pages are no longer all fetched up front. Records start with
+    // page = null and a placeholder geometry estimated from page 1 (the official
+    // pdf.js viewer does the same); the real PDFPageProxy is fetched once when the
+    // page first approaches the viewport and dropped again when it is released. This
+    // keeps a 1000-page document's worker memory bounded by what was actually viewed.
+    async function ensurePage(record) {
+      if (record.page) return record.page;
+      if (!record.pagePromise) {
+        record.pagePromise = pdfDocument.getPage(record.pageNumber).then(function (page) {
+          record.pagePromise = null;
+          if (record.disposed) {
+            try { page.cleanup(); } catch (_) {}
+            return null;
+          }
+          record.page = page;
+          return page;
+        }).catch(function (error) {
+          record.pagePromise = null;
+          throw error;
+        });
+      }
+      return record.pagePromise;
+    }
+
+    function applyRecordSize(record, viewport) {
+      record.element.style.width = viewport.width + 'px';
+      record.element.style.height = viewport.height + 'px';
+      record.canvas.style.width = viewport.width + 'px';
+      record.canvas.style.height = viewport.height + 'px';
+    }
+
+    // Loop 14: pdf.js viewport with the user rotation baked in (the page's own
+    // intrinsic /Rotate is included by pdf.js in page.rotate; the user rotation is
+    // added on top and the total normalized). Mirrors PdfRotationPolicy.normalize.
+    function pageViewport(page, scale) {
+      const totalRotation = (((Number(page.rotate) || 0) + pageRotation) % 360 + 360) % 360;
+      return page.getViewport({ scale: scale, rotation: totalRotation });
+    }
+
+    function updateRecordGeometry(record, keepCanvas) {
+      if (!record.page) return; // placeholder records keep their estimated size
+      const nextViewport = pageViewport(record.page, pageScale(record.page));
+      if (record.viewport &&
+          Math.abs(record.viewport.width - nextViewport.width) < 0.5 &&
+          Math.abs(record.viewport.height - nextViewport.height) < 0.5) {
+        record.viewport = nextViewport;
+        return; // unchanged: avoid canceling renders and zeroing canvases (focus-mode flicker)
+      }
+      record.viewport = nextViewport;
+      applyRecordSize(record, nextViewport);
+      record.rendered = false;
+      if (record.renderTask) {
+        try { record.renderTask.cancel(); } catch (_) {}
+        record.renderTask = null;
+      }
+      // keepCanvas=true (Loop 14 rotation): the old bitmap stays visible and the
+      // freshly rendered, correctly rotated canvas replaces it atomically — no
+      // blank flash while the new orientation renders. Zoom keeps the original
+      // zero-and-realloc behavior (bounds shrink, memory freed sooner).
+      if (!keepCanvas) {
+        record.canvas.width = 0;
+        record.canvas.height = 0;
+        showRecordSkeleton(record);
+      }
+      drawHighlights(record);
+    }
+
+    // Backing-pixel ratio the page may use right now: screen density x WebView pinch
+    // scale, clamped by the ratio cap, the per-page pixel budget AND a per-dimension
+    // ceiling (Loop 12, mirrors PdfCanvasDimensionPolicy). There is deliberately NO
+    // floor of 1.0: a page whose 1x area already exceeds the budget is downsampled
+    // into a legal canvas instead of producing an oversized canvas that Chromium
+    // silently renders blank (pdf.js #11195 class of bugs).
+    function renderPixelRatio(record) {
+      const width = Math.max(1, record.viewport.width);
+      const height = Math.max(1, record.viewport.height);
+      const desired = (window.devicePixelRatio || 1) * Math.max(1, renderScaleHint);
+      const areaCap = Math.sqrt(pagePixelBudget / (width * height));
+      const dimensionCap = maxCanvasDimensionPx / Math.max(width, height);
+      return Math.max(minRenderRatio, Math.min(desired, maxRenderRatio, areaCap, dimensionCap));
+    }
+
+    // Loop 12 (Bug C): keep at most residentPageWindow canvases alive. The least
+    // recently rendered page that is NOT currently on screen is released first;
+    // visible pages are never evicted from under the user.
+    function enforceResidentWindow() {
+      let renderedCount = 0;
+      pageRecords.forEach(function (record) { if (record.rendered) renderedCount++; });
+      if (renderedCount <= residentPageWindow) return;
+      const candidates = pageRecords
+        .filter(function (record) { return record.rendered && !record.visible && !record.renderTask; })
+        .sort(function (a, b) { return (a.lastRenderedAt || 0) - (b.lastRenderedAt || 0); });
+      for (let index = 0; index < candidates.length && renderedCount > residentPageWindow; index++) {
+        releaseRecord(candidates[index]);
+        if (!candidates[index].rendered) renderedCount--;
+      }
+    }
+
+    // Loop 14 (skeletons): a page element carries the 'skeleton' class only while it
+    // has no usable bitmap — after prepareDocument, after a release, or while an
+    // updateRecordGeometry pass zeroed the canvas. The class is removed the moment a
+    // real canvas is swapped in, and never drawn over live content.
+    function showRecordSkeleton(record) {
+      if (record.element) record.element.classList.add('skeleton');
+    }
+
+    function clearRecordSkeleton(record) {
+      if (record.element) record.element.classList.remove('skeleton');
+    }
+
+    // Loop 12 (Bug C): a failed page shows a local retry affordance instead of
+    // staying permanently blank until the user scrolls away and back.
+    function showPageFailure(record) {
+      if (record.failureOverlay) return;
+      const overlay = document.createElement('div');
+      overlay.className = 'page-failure';
+      const label = document.createElement('span');
+      label.textContent = 'This page could not be rendered.';
+      const retry = document.createElement('button');
+      retry.type = 'button';
+      retry.textContent = 'Retry';
+      overlay.appendChild(label);
+      overlay.appendChild(retry);
+      overlay.addEventListener('click', function (event) {
+        event.stopPropagation();
+        retryPage(record.pageNumber);
+      });
+      record.element.appendChild(overlay);
+      record.failureOverlay = overlay;
+    }
+
+    function clearPageFailure(record) {
+      if (record.failureOverlay && record.failureOverlay.parentNode === record.element) {
+        record.element.removeChild(record.failureOverlay);
+      }
+      record.failureOverlay = null;
+      record.renderFailed = false;
+    }
+
+    function retryPage(pageNumber) {
+      const record = pageRecords[pageNumber - 1];
+      if (!record) return;
+      clearPageFailure(record);
+      renderRecord(record);
+    }
+
+    async function renderRecord(record) {
+      if (record.rendered || record.renderTask || record.renderStarting || record.renderFailed || !record.viewport) return;
+      // Reserve the render slot BEFORE the async page fetch: two observer callbacks
+      // racing the same record must not both reach page.render() (per-canvas render
+      // tasks stay strictly serialized).
+      record.renderStarting = true;
+      try {
+        const page = await ensurePage(record);
+        if (!page || record.disposed) return;
+        // The placeholder size was estimated from page 1; sync to the real page
+        // geometry before rasterizing (uniform-size documents are a no-op here).
+        updateRecordGeometry(record, false);
+        if (!record.viewport || record.rendered || record.renderTask || record.renderFailed) return;
+        enforceResidentWindow();
+        const pixelRatio = renderPixelRatio(record);
+        // Already backed at (or above) the achievable ratio: re-rendering would be a
+        // redundant render storm, not a quality gain (Loop 10).
+        if (record.canvas.width > 0 &&
+            record.canvas.width >= Math.floor(record.viewport.width * pixelRatio) - 1) {
+          record.rendered = true;
+          return;
+        }
+        // Loop 10: render into a fresh offscreen canvas and swap it in only when the
+        // render completes. Previously the SAME canvas was resized up-front, which
+        // destroyed the old bitmap and flashed a blank page after every pinch.
+        const target = document.createElement('canvas');
+        target.width = Math.max(1, Math.floor(record.viewport.width * pixelRatio));
+        target.height = Math.max(1, Math.floor(record.viewport.height * pixelRatio));
+        target.style.width = record.viewport.width + 'px';
+        target.style.height = record.viewport.height + 'px';
+        const context = target.getContext('2d', { alpha: false });
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, target.width, target.height);
+        const task = page.render({
+          canvasContext: context,
+          viewport: record.viewport,
+          transform: [pixelRatio, 0, 0, pixelRatio, 0, 0],
+          background: 'rgb(255,255,255)'
+        });
+        record.renderTask = task;
+        try {
+          await task.promise;
+          if (!record.viewport || record.disposed) return; // geometry was reset while rendering
+          const stale = record.canvas;
+          if (stale && stale.parentNode === record.element) {
+            record.element.replaceChild(target, stale);
+          } else {
+            record.element.insertBefore(target, record.highlightLayer);
+          }
+          if (stale) {
+            stale.width = 0;
+            stale.height = 0;
+          }
+          record.canvas = target;
+          record.renderedRatio = pixelRatio;
+          record.rendered = true;
+          record.lastRenderedAt = Date.now();
+          record.renderTask = null; // slot free; the finally below stays a no-op
+          clearPageFailure(record);
+          clearRecordSkeleton(record);
+          drawHighlights(record);
+          enforceResidentWindow();
+          // The page may have scrolled out of the prefetch window while this render
+          // was in flight; do not keep the fresh bitmap resident in that case.
+          if (!record.visible) {
+            releaseRecord(record);
+          } else if (renderPixelRatio(record) > pixelRatio + 0.01) {
+            // Bounded one-shot follow-up: if the achievable ratio grew while this
+            // render was in flight (budget push / settle), re-render once instead of
+            // leaving a stale-sharpness page behind. renderRecord early-returns once
+            // the current ratio is reached.
+            record.rendered = false;
+            renderRecord(record);
+          }
+        } catch (error) {
+          if (error && error.name !== 'RenderingCancelledException') {
+            console.warn('PDF page render failed', error);
+            record.renderFailed = true;
+            showPageFailure(record);
+          }
+          // Release the discarded offscreen buffer promptly on failure/cancellation.
+          target.width = 0;
+          target.height = 0;
+        } finally {
+          if (record.renderTask === task) record.renderTask = null;
+        }
+      } finally {
+        record.renderStarting = false;
+      }
+    }
+
+    // Loop 14: the per-page dark-mode classifier was removed with the PDF night
+    // mode itself — PDF pages now always display their original light colors.
+
+    // v1.3.0 crisp zoom: called by Android (onScaleChanged) after a pinch settles.
+    // Re-renders the already-visible pages with a higher backing resolution WITHOUT
+    // changing the CSS layout, so the page does not jump — Google Drive behavior.
+    // The old canvas stays on screen until the sharper one is ready (no blank flash).
+    // Loop 14: the hint cap follows the viewport's maximum-scale (8x).
+    function setPdfRenderScale(scale) {
+      const next = Math.max(1, Math.min(8, Number(scale) || 1));
+      if (Math.abs(next - renderScaleHint) < 0.05) return;
+      renderScaleHint = next;
+      pageRecords.forEach(function (record) {
+        if (record.rendered && record.canvas && record.canvas.width > 0 && !record.renderTask) {
+          record.rendered = false;
+          renderRecord(record);
+        }
+      });
+    }
+
+    // Loop 12 (Bug 3B / C): Android pushes the TOTAL RGBA budget across resident
+    // canvases (PdfRenderBudgetPolicy.totalCanvasBytes, heap-signal derived); the
+    // per-page budget is derived so aggregate canvas memory stays bounded no matter
+    // how many pages the prefetch window touches.
+    function setPdfQualityBudget(totalBytes) {
+      const value = Math.max(0, Number(totalBytes) || 0);
+      if (!value) return;
+      const perPage = Math.max(
+        minPagePixelBudget,
+        Math.min(maxPagePixelBudget, value / (residentPageWindow * bytesPerPixel))
+      );
+      if (Math.abs(perPage - pagePixelBudget) < 1) return;
+      pagePixelBudget = perPage;
+      pageRecords.forEach(function (record) {
+        if (record.rendered && record.canvas && record.canvas.width > 0 && !record.renderTask) {
+          record.rendered = false;
+          renderRecord(record);
+        }
+      });
+    }
+
+    function releaseRecord(record) {
+      if (record.renderTask || record.renderStarting) return;
+      if (!record.rendered && !record.page) return;
+      record.canvas.width = 0;
+      record.canvas.height = 0;
+      record.rendered = false;
+      showRecordSkeleton(record);
+      clearPageFailure(record);
+      // Loop 12: drop the PDFPageProxy as well. page.cleanup() frees the worker-side
+      // operator list and decoded objects for this page (it is a safe no-op while a
+      // render is active, which the guard above already prevents); the proxy is
+      // re-fetched from pdfDocument when the page becomes visible again.
+      if (record.page) {
+        try { record.page.cleanup(); } catch (_) {}
+        record.page = null;
+      }
+    }
+
+    function drawHighlights(record) {
+      if (!record || !record.highlightLayer) return;
+      record.highlightLayer.replaceChildren();
+      for (let matchIndex = 0; matchIndex < searchMatches.length; matchIndex++) {
+        const match = searchMatches[matchIndex];
+        if (match.pageNumber !== record.pageNumber) continue;
+        for (const storedRect of match.rectangles) {
+          // Loop 14: stored rects live in unrotated page space and are mapped into
+          // the CURRENT display orientation here, on every draw.
+          const rect = rotateNormRect(storedRect, pageRotation);
+          const highlight = document.createElement('div');
+          highlight.className = 'pdf-search-highlight' + (matchIndex === activeMatchIndex ? ' active' : '');
+          highlight.style.left = (rect.left * 100) + '%';
+          highlight.style.top = (rect.top * 100) + '%';
+          highlight.style.width = (Math.max(.003, rect.right - rect.left) * 100) + '%';
+          highlight.style.height = (Math.max(.002, rect.bottom - rect.top) * 100) + '%';
+          record.highlightLayer.appendChild(highlight);
+        }
+      }
+    }
+
+    function reportVisiblePage(entries) {
+      const visible = entries.filter(function (entry) { return entry.isIntersecting; });
+      if (!visible.length) return;
+      visible.sort(function (a, b) { return b.intersectionRatio - a.intersectionRatio; });
+      const viewportCenter = (window.innerHeight || 0) / 2;
+      visible.sort(function (a, b) {
+        const rectA = a.boundingClientRect;
+        const rectB = b.boundingClientRect;
+        const distanceA = Math.abs((rectA.top + rectA.bottom) / 2 - viewportCenter);
+        const distanceB = Math.abs((rectB.top + rectB.bottom) / 2 - viewportCenter);
+        return distanceA - distanceB;
+      });
+      const record = pageRecords[Number(visible[0].target.dataset.pageNumber) - 1];
+      if (record && currentPage !== record.pageNumber) {
+        currentPage = record.pageNumber;
+        bridgeCall('onPdfPageChanged', currentPage, pageRecords.length);
+      }
+    }
+
+    // Placeholder records have no page proxy yet; re-derive their estimated size so
+    // zoom and rotation changes keep the scroll layout roughly correct before first
+    // render. Loop 14: quarter turns swap the estimated axes (PdfRotationPolicy).
+    function updatePlaceholderGeometry(record) {
+      if (record.page || !record.baseWidth) return;
+      const scale = computePageScale(rotatedBaseWidth(record.baseWidth, record.baseHeight));
+      const baseW = record.baseWidth * scale;
+      const baseH = record.baseHeight * scale;
+      record.viewport = (pageRotation % 180 === 90)
+        ? { width: baseH, height: baseW }
+        : { width: baseW, height: baseH };
+      applyRecordSize(record, record.viewport);
+    }
+
+    async function prepareDocument(documentProxy) {
+      // Loop 12: any previous document's records are disposed explicitly — cancel
+      // in-flight renders, drop canvases and page proxies, and let ensurePage() discard
+      // results that land after the swap.
+      pageRecords.forEach(function (record) {
+        record.disposed = true;
+        if (record.renderTask) { try { record.renderTask.cancel(); } catch (_) {} }
+        record.canvas.width = 0;
+        record.canvas.height = 0;
+        if (record.page) { try { record.page.cleanup(); } catch (_) {} }
+      });
+      const root = document.getElementById('pdf-document');
+      root.replaceChildren();
+      pageRecords = [];
+      indexedPages.clear();
+      indexedLruOrder.length = 0;
+      currentPage = 0;
+
+      // Loop 12 (Bug C): fetch only page 1 up front and use its geometry for every
+      // placeholder (the official pdf.js viewer does the same). A 1000-page document
+      // used to await 1000 sequential getPage() calls before onPdfDocumentLoaded —
+      // why large PDFs took so long to open — and retained every page proxy for the
+      // lifetime of the viewer.
+      const firstPage = await documentProxy.getPage(1);
+      const baseViewport = firstPage.getViewport({ scale: 1 });
+      const placeholderScale = computePageScale(baseViewport.width);
+      const placeholderWidth = baseViewport.width * placeholderScale;
+      const placeholderHeight = baseViewport.height * placeholderScale;
+
+      for (let pageNumber = 1; pageNumber <= documentProxy.numPages; pageNumber++) {
+        const pageElement = document.createElement('section');
+        // Loop 14: 'skeleton' until the first canvas lands; the dark 'natural' class
+        // went away with the PDF night mode.
+        pageElement.className = 'pdf-page skeleton';
+        pageElement.dataset.pageNumber = String(pageNumber);
+        const canvas = document.createElement('canvas');
+        canvas.setAttribute('aria-label', 'Page ' + pageNumber);
+        const highlightLayer = document.createElement('div');
+        highlightLayer.className = 'highlight-layer';
+        pageElement.appendChild(canvas);
+        pageElement.appendChild(highlightLayer);
+        root.appendChild(pageElement);
+        const record = {
+          pageNumber: pageNumber,
+          page: pageNumber === 1 ? firstPage : null,
+          element: pageElement,
+          canvas: canvas,
+          highlightLayer: highlightLayer,
+          baseWidth: baseViewport.width,
+          baseHeight: baseViewport.height,
+          viewport: null,
+          rendered: false,
+          renderTask: null,
+          renderStarting: false,
+          renderFailed: false,
+          failureOverlay: null,
+          visible: false,
+          lastRenderedAt: 0,
+          pagePromise: null
+        };
+        pageRecords.push(record);
+        if (pageNumber === 1) {
+          updateRecordGeometry(record);
+        } else {
+          record.viewport = { width: placeholderWidth, height: placeholderHeight };
+          applyRecordSize(record, record.viewport);
+        }
+        if (pageNumber % 32 === 0) await new Promise(function (resolve) { setTimeout(resolve, 0); });
+      }
+
+      if (pageObserver) pageObserver.disconnect();
+      if ('IntersectionObserver' in window) {
+        pageObserver = new IntersectionObserver(function (entries) {
+          reportVisiblePage(entries);
+          entries.forEach(function (entry) {
+            const record = pageRecords[Number(entry.target.dataset.pageNumber) - 1];
+            if (!record) return;
+            if (entry.isIntersecting) {
+              record.visible = true;
+              renderRecord(record);
+            } else {
+              record.visible = false;
+              releaseRecord(record);
+            }
+          });
+        }, { root: null, rootMargin: '900px 0px', threshold: [0, .15, .5, .85] });
+        pageRecords.forEach(function (record) { pageObserver.observe(record.element); });
+      } else {
+        // No IntersectionObserver: render the first pages and keep them marked
+        // visible so the post-render residency check does not drop them again.
+        pageRecords.slice(0, 4).forEach(function (record) {
+          record.visible = true;
+          renderRecord(record);
+        });
+      }
+      bridgeCall('onPdfDocumentLoaded', documentProxy.numPages);
+      if (pageRecords.length) {
+        currentPage = 1;
+        bridgeCall('onPdfPageChanged', currentPage, pageRecords.length);
+      }
+    }
+
+    async function loadPdf() {
+      if (pdfDocument) return pdfDocument;
+      if (loadingPromise) return loadingPromise;
+
+      const loadingTask = pdfjsLib.getDocument({
+        url: pdfUrl,
+        cMapUrl: assetBase + 'cmaps/',
+        cMapPacked: true,
+        standardFontDataUrl: assetBase + 'standard_fonts/',
+        isEvalSupported: false,
+        useWorkerFetch: true,
+        disableRange: false,
+        disableStream: true,
+        disableAutoFetch: true
+      });
+      loadingTask.onPassword = function (updatePassword, reason) {
+        passwordUpdater = updatePassword;
+        bridgeCall('onPdfPasswordRequired', Number(reason) || 1);
+      };
+      loadingPromise = loadingTask.promise.then(async function (documentProxy) {
+        pdfDocument = documentProxy;
+        await prepareDocument(documentProxy);
+        return documentProxy;
+      }).catch(function (error) {
+        loadingPromise = null;
+        bridgeCall('onPdfError', String(error && (error.message || error) || 'Could not open this PDF'));
+        throw error;
+      });
+      return loadingPromise;
+    }
+
+    function clearHighlights() {
+      searchMatches = [];
+      activeMatchIndex = -1;
+      pageRecords.forEach(drawHighlights);
+    }
+
+    function publishCurrentResults(requestId, query, count, truncated, searching) {
+      publishResults({
+        requestId: requestId,
+        query: query,
+        count: count,
+        truncated: Boolean(truncated),
+        searching: Boolean(searching),
+        currentIndex: activeMatchIndex,
+        // Geometry stays local to the reader; the Android bridge only needs navigation targets.
+        matches: searchMatches.map(function (match) { return { pageNumber: match.pageNumber }; })
+      });
+    }
+
+    async function searchPdf(rawQuery) {
+      const requestId = ++latestRequestId;
+      const query = String(rawQuery || '').trim();
+      clearHighlights();
+      if (!query) {
+        publishCurrentResults(requestId, query, 0, false, false);
+        return;
+      }
+      publishCurrentResults(requestId, query, 0, false, true);
+
+      try {
+        const documentProxy = await loadPdf();
+        if (requestId !== latestRequestId) return;
+        const expression = new RegExp(escapeRegExp(query), 'gi');
+        const results = [];
+        let totalCount = 0;
+
+        for (let pageNumber = 1; pageNumber <= documentProxy.numPages; pageNumber++) {
+          if (requestId !== latestRequestId) return;
+          const page = await getIndexedPage(pageNumber);
+          expression.lastIndex = 0;
+          let match;
+          while ((match = expression.exec(page.text)) !== null) {
+            totalCount++;
+            if (results.length < maxStoredMatches) {
+              const matchStart = match.index;
+              const matchEnd = matchStart + match[0].length;
+              const rectangles = [];
+              for (const piece of page.pieces) {
+                if (piece.end <= matchStart || piece.start >= matchEnd) continue;
+                const localStart = Math.max(0, matchStart - piece.start);
+                const localEnd = Math.min(piece.str.length, matchEnd - piece.start);
+                if (localEnd > localStart) {
+                  rectangles.push(makeRect(page, piece, localStart, localEnd));
+                  if (rectangles.length >= maxRectsPerMatch) break;
+                }
+              }
+              results.push({ pageNumber: pageNumber, rectangles: rectangles });
+            }
+            if (match[0].length === 0) expression.lastIndex++;
+          }
+          if (pageNumber % 12 === 0) await new Promise(function (resolve) { setTimeout(resolve, 0); });
+        }
+
+        if (requestId !== latestRequestId) return;
+        searchMatches = results;
+        activeMatchIndex = results.length ? 0 : -1;
+        pageRecords.forEach(drawHighlights);
+        if (activeMatchIndex >= 0) showPdfSearchMatch(activeMatchIndex);
+        publishCurrentResults(requestId, query, totalCount, totalCount > maxStoredMatches, false);
+      } catch (error) {
+        if (requestId === latestRequestId) {
+          publishError(requestId, query, error);
+        }
+      }
+    }
+
+    function showPdfSearchMatch(index) {
+      if (!searchMatches.length) {
+        activeMatchIndex = -1;
+        pageRecords.forEach(drawHighlights);
+        return -1;
+      }
+      activeMatchIndex = ((Number(index) || 0) % searchMatches.length + searchMatches.length) % searchMatches.length;
+      pageRecords.forEach(drawHighlights);
+      const match = searchMatches[activeMatchIndex];
+      const record = pageRecords[match.pageNumber - 1];
+      if (record) {
+        record.element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        renderRecord(record);
+      }
+      return activeMatchIndex;
+    }
+
+    function goToPdfPage(pageNumber) {
+      const record = pageRecords[Math.max(0, Math.min(pageRecords.length - 1, Number(pageNumber) - 1))];
+      if (record) {
+        record.element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        renderRecord(record);
+      }
+    }
+
+    // Loop 14: PDF night mode was removed — the bridge entry point is gone. PDFs
+    // always display in light mode.
+
+    function setPdfZoom(factor) {
+      // Loop 14: the logical zoom cap follows the viewport's maximum-scale (8x).
+      // Memory stays bounded: renderPixelRatio() clamps every canvas by the total
+      // RGBA budget, the ratio cap and the 8192px dimension ceiling regardless of
+      // how far the user pinches.
+      currentZoom = Math.max(.25, Math.min(8, Number(factor) || 1));
+      const anchor = captureScrollAnchor();
+      pageRecords.forEach(function (record) {
+        if (record.page) updateRecordGeometry(record, false);
+        else updatePlaceholderGeometry(record);
+        if (pageObserver) pageObserver.unobserve(record.element);
+      });
+      if (pageObserver) pageRecords.forEach(function (record) { pageObserver.observe(record.element); });
+      else pageRecords.slice(0, 4).forEach(renderRecord);
+      restoreScrollAnchor(anchor);
+    }
+
+    // ---------------------------------------------------------------------------
+    // Loop 14: view rotation. The toolbar button pushes setPageRotation(deg);
+    // everything else is derived here:
+    //   - every record's geometry is re-derived with the rotation baked into the
+    //     pdf.js viewport (quarter turns swap width/height), placeholders included;
+    //   - old canvases are KEPT on screen while the correctly rotated replacements
+    //     render offscreen, then swapped atomically (no blank flash, no page-1 reset);
+    //   - the reading position is preserved with a page + within-page-fraction
+    //     anchor (PdfRotationPolicy.scrollTopForAnchor mirrors the math);
+    //   - search highlights re-map through rotateNormRect for the new orientation.
+    // The authenticated document session is untouched: no reload, no password prompt.
+    // ---------------------------------------------------------------------------
+    function captureScrollAnchor() {
+      const scroller = document.scrollingElement || document.documentElement || document.body;
+      if (!scroller || !pageRecords.length) return { page: Math.max(1, currentPage), fraction: 0, top: 0 };
+      const scrollTop = scroller.scrollTop;
+      let targetRecord = pageRecords[0];
+      for (const rec of pageRecords) {
+        if (rec.element && (rec.element.offsetTop + rec.element.offsetHeight) > scrollTop) {
+          targetRecord = rec;
+          break;
+        }
+      }
+      const elementTop = targetRecord.element.offsetTop;
+      const elementHeight = Math.max(1, targetRecord.element.offsetHeight);
+      const within = Math.max(0, scrollTop - elementTop);
+      return {
+        page: targetRecord.pageNumber,
+        fraction: Math.min(1, Math.max(0, within / elementHeight)),
+        top: scrollTop
+      };
+    }
+
+    function restoreScrollAnchor(anchor) {
+      if (!anchor) return;
+      const scroller = document.scrollingElement || document.documentElement || document.body;
+      const record = pageRecords[anchor.page - 1];
+      if (!scroller || !record || !record.element) {
+        if (scroller && anchor.top != null) scroller.scrollTop = anchor.top;
+        return;
+      }
+      // Mirrors PdfRotationPolicy.scrollTopForAnchor (clamped 0..1).
+      const fraction = Math.min(1, Math.max(0, Number(anchor.fraction) || 0));
+      scroller.scrollTop = record.element.offsetTop + fraction * Math.max(1, record.element.offsetHeight);
+    }
+
+    function setPageRotation(degrees) {
+      const next = ((Math.round(Number(degrees) || 0) % 360) + 360) % 360;
+      if (next === pageRotation || next % 90 !== 0 || !pdfDocument) return;
+      const anchor = captureScrollAnchor();
+      pageRotation = next;
+      pageRecords.forEach(function (record) {
+        if (record.page) {
+          updateRecordGeometry(record, true); // keep the old bitmap visible while re-rendering
+        } else {
+          updatePlaceholderGeometry(record);
+        }
+      });
+      restoreScrollAnchor(anchor);
+      // Re-render everything that currently holds a bitmap. updateRecordGeometry
+      // already set rendered=false for pages whose size changed (every non-square
+      // page); square pages need the explicit kick below, and re-observing makes
+      // the IntersectionObserver re-report visible pages for the render pass.
+      pageRecords.forEach(function (record) {
+        if (record.canvas && record.canvas.width > 0 && !record.renderTask) {
+          record.rendered = false;
+          renderRecord(record);
+        }
+      });
+      if (pageObserver) {
+        pageRecords.forEach(function (record) { pageObserver.unobserve(record.element); });
+        pageRecords.forEach(function (record) { pageObserver.observe(record.element); });
+      }
+    }
+
+    function submitPdfPassword(password) {
+      if (passwordUpdater) {
+        const updatePassword = passwordUpdater;
+        passwordUpdater = null;
+        updatePassword(String(password || ''));
+      }
+    }
+
+    let lastTapTime = 0;
+    let singleTapTimer = null;
+    document.addEventListener('click', function (event) {
+      if (event.target && event.target.closest && event.target.closest('button, a, input, textarea, select')) return;
+      const now = Date.now();
+      if (now - lastTapTime < 280) {
+        lastTapTime = 0;
+        if (singleTapTimer) { clearTimeout(singleTapTimer); singleTapTimer = null; }
+        bridgeCall('onPdfDoubleTap');
+      } else {
+        lastTapTime = now;
+        if (singleTapTimer) clearTimeout(singleTapTimer);
+        singleTapTimer = setTimeout(function () {
+          singleTapTimer = null;
+          bridgeCall('onPdfSingleTap');
+        }, 250);
+      }
+    });
+    let resizeTimer = null;
+    window.addEventListener('resize', function () {
+      if (!pdfDocument || !pageRecords.length) return;
+      clearTimeout(resizeTimer);
+      // Debounced: resizing the WebView (focus mode, rotation) used to cancel and
+      // re-render every page per frame, flashing blank canvases mid-transition.
+      resizeTimer = setTimeout(function () { setPdfZoom(currentZoom); }, 180);
+    });
+
+    window.searchPdf = searchPdf;
+    window.showPdfSearchMatch = showPdfSearchMatch;
+    window.gotoPdfPage = goToPdfPage;
+    window.setPdfZoom = setPdfZoom;
+    window.setPageRotation = setPageRotation;
+    window.setPdfRenderScale = setPdfRenderScale;
+    window.setPdfQualityBudget = setPdfQualityBudget;
+    window.retryPdfPage = retryPage;
+    window.submitPdfPassword = submitPdfPassword;
+    window.clearPdfSearch = function () {
+      latestRequestId++;
+      clearHighlights();
+      publishCurrentResults(latestRequestId, '', 0, false, false);
+    };
+    window.AndroidPdfSearchReady = function () {
+      bridgeCall('onPdfSearchReady', 'ready');
+      loadPdf().catch(function () {});
+    };
+    window.AndroidPdfSearchReady();
+  </script>
+</body>
+</html>

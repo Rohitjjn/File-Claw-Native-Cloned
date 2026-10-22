@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Outer thick stroke of the file document -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round"
+        android:pathData="M39,35 A2,2 0 0,1 41,33 H57 L69,45 V73 A2,2 0 0,1 67,75 H41 A2,2 0 0,1 39,73 Z" />
+        
+    <!-- The folded sheet corner triangle, filled solid white -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M57,33 L57,45 H69 Z" />
+        
+    <!-- Centered Pills (Horizontal lines representing text of document) -->
+    <!-- Pill 1: Centered horizontally, vertical group center around 55 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M46,55 a2,2 0 0,1 2,-2 h12 a2,2 0 0,1 2,2 a2,2 0 0,1 -2,2 H48 a2,2 0 0,1 -2,-2 z" />
+        
+    <!-- Pill 2: Centered horizontally, vertical group center around 63 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M46,63 a2,2 0 0,1 2,-2 h12 a2,2 0 0,1 2,2 a2,2 0 0,1 -2,2 H48 a2,2 0 0,1 -2,-2 z" />
+</vector>

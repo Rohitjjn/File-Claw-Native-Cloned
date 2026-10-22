@@ -1,0 +1,34 @@
+# Layered on top of detekt's defaults (buildUponDefaultConfig = true).
+# Scope today: com.example.core only. Widen `source` in app/build.gradle.kts as the UI layer is cleaned up.
+build:
+  maxIssues: 0
+
+style:
+  MagicNumber:
+    active: false          # byte signatures and size limits are the point of this code
+  MaxLineLength:
+    maxLineLength: 140
+  ReturnCount:
+    active: false
+  ThrowsCount:
+    active: false
+  WildcardImport:
+    active: true
+
+complexity:
+  CyclomaticComplexMethod:
+    threshold: 45          # MagicSniffer.sniff is a flat signature table, not branching logic
+  LongMethod:
+    threshold: 120
+  NestedBlockDepth:
+    threshold: 6
+
+naming:
+  FunctionNaming:
+    ignoreAnnotated: ['Composable']
+
+exceptions:
+  TooGenericExceptionCaught:
+    active: false          # I/O boundaries intentionally convert any failure into a user-facing error
+  SwallowedException:
+    active: false
