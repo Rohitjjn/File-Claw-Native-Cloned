@@ -9,23 +9,21 @@ import com.example.data.AppDatabase
 import com.example.data.AppRepository
 import com.example.data.RecentFileEntity
 import com.example.data.SettingEntity
-import com.example.core.format.Detection
-import com.example.core.format.FileKind
+import com.example.core.archive.ArchiveNode
+import com.example.domain.preview.FileContentState
+import com.example.domain.preview.FormatOpenRequest
+import com.example.domain.preview.FormatSaveRequest
+import com.example.domain.preview.FormatOperationResult
 import com.example.core.format.FormatDetector
 import com.example.core.format.FormatRegistry
-import com.example.core.format.Support
 import com.example.core.io.AtomicFileWriter
 import com.example.core.io.BatchFileOperations
 import com.example.core.io.TextEncoding
-import com.example.core.io.TextLoadException
-import com.example.core.io.TextLoader
-import com.example.core.model3d.Mesh
-import com.example.core.model3d.MeshParser
 import com.example.core.security.PathGuard
-import com.example.core.text.EpubReader
-import com.example.core.text.OdfTextExtractor
-import com.example.core.text.RtfExtractor
-import com.example.services.FileManager
+import com.example.platform.storage.FileManager
+import com.example.formats.registry.DefaultFormatHandlers
+import com.example.formats.registry.open
+import com.example.formats.registry.save
 import com.example.utils.SampleFilesGenerator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,17 +38,16 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
 import java.io.File
 import java.io.FileOutputStream
-import java.io.FileInputStream
-import java.io.InputStream
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val fileManager = FileManager()
+    private val formatHandlers = DefaultFormatHandlers.create(fileManager)
     private val repository: AppRepository
 
     // Indexing for super-fast search
     private val allIndexedFiles = java.util.Collections.synchronizedList(mutableListOf<String>())
-    
+
     private val _isIndexing = MutableStateFlow(false)
     val isIndexing: StateFlow<Boolean> = _isIndexing.asStateFlow()
 
@@ -138,11 +135,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     init {
         val database = AppDatabase.getDatabase(application)
         repository = AppRepository(database.recentFileDao(), database.settingDao())
-        
+        FormatRegistry.registerHandlers(formatHandlers)
+
         loadSearchTermsHistory()
         loadFavorites()
 
-        
+
         // Initialize settings, clean up sample files, and build search index from stored cache and background scanner
         viewModelScope.launch(Dispatchers.IO) {
             // Fix Settings DB initialization to inspect real Dao row
@@ -204,7 +202,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             .maxDepth(INDEX_MAX_DEPTH)
                             .onEnter { d ->
                                 val name = d.name
-                                !name.startsWith(".") && 
+                                !name.startsWith(".") &&
                                 !name.equals("Android", ignoreCase = true) &&
                                 !name.contains("cache", ignoreCase = true) &&
                                 !name.contains("tmp", ignoreCase = true) &&
@@ -305,87 +303,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             initialValue = emptyList()
         )
 
-    // Current open file states
-    sealed class FileContentState {
-        object Idle : FileContentState()
-        object Loading : FileContentState()
-
-        /**
-         * [truncated] and [readOnlyReason] are flags, never text inside [content]: the editor refuses to
-         * save a truncated or converted view, so it can never overwrite the original with a fragment.
-         */
-        data class TextSuccess(
-            val content: String,
-            val file: RecentFileEntity,
-            val truncated: Boolean = false,
-            val totalBytes: Long = 0,
-            val charsetName: String = "UTF-8",
-            val hadBom: Boolean = false,
-            val readOnlyReason: String? = null
-        ) : FileContentState() {
-            val editable: Boolean get() = !truncated && readOnlyReason == null
-        }
-
-        data class CsvSuccess(
-            val rows: List<List<String>>,
-            val file: RecentFileEntity,
-            val truncated: Boolean = false,
-            val readOnlyReason: String? = null,
-            val table: FileManager.TableData? = null
-        ) : FileContentState() {
-            val editable: Boolean get() = !truncated && readOnlyReason == null && table != null
-        }
-
-        data class ZipSuccess(val root: FileManager.ZipNode, val file: RecentFileEntity, val password: String = "") : FileContentState()
-        data class ArchivePasswordRequired(val file: RecentFileEntity) : FileContentState()
-        data class ImageSuccess(val file: RecentFileEntity) : FileContentState()
-        data class SvgSuccess(val file: RecentFileEntity) : FileContentState()
-        data class PdfSuccess(val file: RecentFileEntity) : FileContentState()
-        data class DocxSuccess(val base64Data: String, val file: RecentFileEntity) : FileContentState()
-        data class PptxSuccess(val base64Data: String, val file: RecentFileEntity) : FileContentState()
-        data class MediaSuccess(val file: RecentFileEntity, val isAudio: Boolean) : FileContentState()
-        data class SqliteSuccess(val file: RecentFileEntity) : FileContentState()
-        data class FontSuccess(val file: RecentFileEntity) : FileContentState()
-        data class Model3dSuccess(val mesh: Mesh, val file: RecentFileEntity, val label: String) : FileContentState()
-        data class HtmlSuccess(val html: String, val file: RecentFileEntity, val title: String) : FileContentState()
-        data class BinarySuccess(
-            val hexRows: List<String>,
-            val asciiRows: List<String>,
-            val file: RecentFileEntity,
-            val label: String? = null,
-            val note: String? = null
-        ) : FileContentState()
-        data class Error(val message: String) : FileContentState()
-
-        /** The file this state is showing, whichever viewer it belongs to. */
-        val fileOrNull: RecentFileEntity?
-            get() = when (this) {
-                is TextSuccess -> file
-                is CsvSuccess -> file
-                is ZipSuccess -> file
-                is ArchivePasswordRequired -> file
-                is ImageSuccess -> file
-                is SvgSuccess -> file
-                is PdfSuccess -> file
-                is DocxSuccess -> file
-                is PptxSuccess -> file
-                is MediaSuccess -> file
-                is SqliteSuccess -> file
-                is FontSuccess -> file
-                is Model3dSuccess -> file
-                is HtmlSuccess -> file
-                is BinarySuccess -> file
-                else -> null
-            }
-    }
-
     private val _currentFileState = MutableStateFlow<FileContentState>(FileContentState.Idle)
     val currentFileState: StateFlow<FileContentState> = _currentFileState.asStateFlow()
 
     /**
      * Inline edit mode for MD/TXT preview: the preview screen stays in place and morphs into an
      * editor instead of pushing a separate editor route. The draft text itself is intentionally
-     * kept as transient Compose state inside [com.example.ui.screens.FilePreviewScreen] (same
+     * kept as transient Compose state inside [com.example.feature.preview.FilePreviewScreen] (same
      * pattern as EditorScreen) so no TextFieldValue ever leaks into the ViewModel.
      */
     private val _isEditMode = MutableStateFlow(false)
@@ -451,72 +375,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _currentFileState.value = FileContentState.Idle
     }
 
-    private fun isBinaryFile(file: File): Boolean {
-        if (!file.exists()) return false
-        try {
-            FileInputStream(file).use { fis ->
-                val buffer = ByteArray(1024)
-                val bytesRead = fis.read(buffer)
-                if (bytesRead <= 0) return false
-                for (i in 0 until bytesRead) {
-                    if (buffer[i] == 0.toByte()) {
-                        return true
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            // default to text if unreadable/error
-        }
-        return false
-    }
-
-    private fun generateHexDump(file: File): Pair<List<String>, List<String>> {
-        val hexLines = mutableListOf<String>()
-        val asciiLines = mutableListOf<String>()
-        val maxBytesToDump = 4096 // Limit dump size for high UI performance and quick display
-        try {
-            FileInputStream(file).use { fis ->
-                val buffer = ByteArray(16)
-                var offset = 0
-                while (offset < maxBytesToDump) {
-                    val bytesRead = fis.read(buffer)
-                    if (bytesRead <= 0) break
-                    
-                    val hexBuilder = StringBuilder()
-                    val asciiBuilder = StringBuilder()
-                    
-                    // AddOffset address
-                    hexBuilder.append(String.format("%08X: ", offset))
-                    
-                    for (i in 0 until 16) {
-                        if (i < bytesRead) {
-                            val b = buffer[i].toInt() and 0xFF
-                            hexBuilder.append(String.format("%02X ", b))
-                            val c = b.toChar()
-                            if (c in ' '..'~') {
-                                asciiBuilder.append(c)
-                            } else {
-                                asciiBuilder.append('.')
-                            }
-                        } else {
-                            hexBuilder.append("   ")
-                        }
-                        if (i == 7) {
-                            hexBuilder.append(" ")
-                        }
-                    }
-                    hexLines.add(hexBuilder.toString())
-                    asciiLines.add(asciiBuilder.toString())
-                    offset += bytesRead
-                }
-            }
-        } catch (e: Exception) {
-            hexLines.add("Error generating hex dump")
-            asciiLines.add("")
-        }
-        return Pair(hexLines, asciiLines)
-    }
-
     fun openFile(fileEntity: RecentFileEntity, archivePassword: String = "") {
         _currentFileState.value = FileContentState.Loading
         _loadingFilePath.value = fileEntity.path
@@ -552,7 +410,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
                 // Content-first routing: magic bytes decide, the extension is only a hint.
                 val detection = FormatDetector.detect(file, file.name)
-                _currentFileState.value = buildContentState(file, finalEntity, detection, archivePassword, settingsState.value.defaultEncoding)
+                _currentFileState.value = FormatRegistry.open(
+                    FormatOpenRequest(
+                        file = file,
+                        fileEntity = finalEntity,
+                        detection = detection,
+                        archivePassword = archivePassword,
+                        encoding = settingsState.value.defaultEncoding
+                    )
+                )
             } catch (e: OutOfMemoryError) {
                 _currentFileState.value = FileContentState.Error("This file is too large to open in memory on this device.")
             } catch (e: Exception) {
@@ -564,142 +430,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun buildContentState(
-        file: File,
-        entity: RecentFileEntity,
-        detection: Detection,
-        password: String,
-        encoding: String
-    ): FileContentState {
-        val spec = detection.spec
-        val ext = FormatRegistry.extensionOf(file.name).ifEmpty { entity.extension.lowercase() }
-        return when (spec.kind) {
-            FileKind.DOCX -> webDocument(file, entity, password) { FileContentState.DocxSuccess(it, entity) }
-            FileKind.PPTX -> webDocument(file, entity, password) { FileContentState.PptxSuccess(it, entity) }
-            FileKind.PDF -> FileContentState.PdfSuccess(entity)
-            FileKind.DELIMITED -> {
-                val table = fileManager.loadDelimited(file.absolutePath, ext, encoding)
-                FileContentState.CsvSuccess(table.rows, entity, table.truncated, null, table)
-            }
-            FileKind.SPREADSHEET -> {
-                val x = fileManager.loadExcel(file.absolutePath)
-                val reason = if (x.sheetCount > 1) {
-                    "Excel workbooks are view-only. Showing sheet \"${x.sheetName}\" (1 of ${x.sheetCount})."
-                } else {
-                    "Excel workbooks are view-only to protect formulas and formatting."
-                }
-                FileContentState.CsvSuccess(x.rows, entity, x.truncated, reason, null)
-            }
-            FileKind.ARCHIVE, FileKind.COMPRESSED_STREAM ->
-                if (spec.support == Support.IDENTIFY) identifyOnly(file, entity, detection, "${spec.displayName} files can't be opened yet.")
-                else openArchive(file, entity, password)
-            FileKind.IMAGE -> FileContentState.ImageSuccess(entity)
-            FileKind.SVG -> FileContentState.SvgSuccess(entity)
-            FileKind.AUDIO -> FileContentState.MediaSuccess(entity, isAudio = true)
-            FileKind.VIDEO -> FileContentState.MediaSuccess(entity, isAudio = false)
-            FileKind.SQLITE -> FileContentState.SqliteSuccess(entity)
-            FileKind.FONT ->
-                if (spec.support == Support.FULL) FileContentState.FontSuccess(entity)
-                else identifyOnly(file, entity, detection, "${spec.displayName} can't be previewed yet.")
-            FileKind.MODEL_3D -> when (spec.id) {
-                "stl" -> FileContentState.Model3dSuccess(MeshParser.parseStl(file), entity, "STL")
-                "obj" -> FileContentState.Model3dSuccess(MeshParser.parseObj(file), entity, "OBJ")
-                else -> identifyOnly(file, entity, detection, "${spec.displayName} models can't be viewed yet.")
-            }
-            FileKind.RTF -> {
-                val raw = TextLoader.load(file, "ISO-8859-1", 20_000_000)
-                FileContentState.TextSuccess(
-                    RtfExtractor.extract(raw.text), entity,
-                    readOnlyReason = "Rich Text is shown as plain text (read-only)."
-                )
-            }
-            FileKind.ODF -> FileContentState.TextSuccess(
-                OdfTextExtractor.extract(file), entity,
-                readOnlyReason = "Text extracted from an OpenDocument file (read-only)."
+    suspend fun getMostRecentFile(): RecentFileEntity? = repository.getMostRecentFile()
+
+    /** Replaces the current image-history path when the user swipes within its folder. */
+    fun recordImageFolderPage(currentEntity: RecentFileEntity, imageFile: File) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val existing = repository.getRecentFileByPath(currentEntity.path)
+            val updated = (existing ?: currentEntity).copy(
+                path = imageFile.absolutePath,
+                name = imageFile.name,
+                extension = imageFile.extension.lowercase(),
+                size = imageFile.length(),
+                lastOpened = System.currentTimeMillis()
             )
-            FileKind.EPUB -> FileContentState.HtmlSuccess(EpubReader.toHtml(file), entity, entity.name)
-            FileKind.LEGACY_OFFICE -> {
-                val ext = entity.extension.lowercase()
-                when (ext) {
-                    "xls" -> {
-                        val parsed = runCatching { com.example.core.format.Biff8XlsParser.parse(file) }.getOrNull()
-                        if (parsed != null && parsed.primarySheetRows.isNotEmpty()) {
-                            val sheetLabel = parsed.sheetNames.firstOrNull()?.let { "Sheet: $it • " }.orEmpty()
-                            FileContentState.CsvSuccess(
-                                rows = parsed.primarySheetRows,
-                                file = entity,
-                                truncated = false,
-                                readOnlyReason = "${sheetLabel}Legacy Excel (.xls) file is shown as read-only grid."
-                            )
-                        } else {
-                            identifyOnly(file, entity, detection, "Legacy Excel (.xls) binary file could not be parsed.")
-                        }
-                    }
-                    "doc" -> {
-                        val extracted = runCatching { com.example.core.format.LegacyDocExtractor.extract(file) }.getOrNull()
-                        if (extracted != null && extracted.paragraphs.isNotEmpty()) {
-                            FileContentState.TextSuccess(
-                                content = extracted.text,
-                                file = entity,
-                                readOnlyReason = "Text recovered from legacy Word (.doc) binary file (read-only)."
-                            )
-                        } else {
-                            identifyOnly(file, entity, detection, "Legacy Word (.doc) binary file could not be parsed.")
-                        }
-                    }
-                    else -> identifyOnly(
-                        file, entity, detection,
-                        "Legacy binary Office format. Convert it to .docx / .xlsx / .pptx to open it here."
-                    )
-                }
-            }
-            FileKind.BINARY -> identifyOnly(
-                file, entity, detection,
-                if (detection.mismatch) "The extension says one thing, but the content is binary data." else null
-            )
-            FileKind.TEXT, FileKind.MARKDOWN, FileKind.HTML -> loadTextState(file, entity, encoding)
+            repository.replaceRecentFilePath(currentEntity.path, updated)
         }
     }
 
-    private fun loadTextState(file: File, entity: RecentFileEntity, encoding: String): FileContentState {
-        return try {
-            val r = TextLoader.load(file, encoding, TEXT_PREVIEW_MAX_CHARS)
-            FileContentState.TextSuccess(r.text, entity, r.truncated, r.totalBytes, r.charset.name(), r.hadBom)
-        } catch (e: TextLoadException) {
-            FileContentState.Error(e.message ?: "Could not read file")
-        }
-    }
-
-    private fun openArchive(file: File, entity: RecentFileEntity, password: String): FileContentState {
-        if (password.isEmpty() && fileManager.isArchiveEncrypted(file.absolutePath)) {
-            return FileContentState.ArchivePasswordRequired(entity)
-        }
-        return try {
-            val root = fileManager.parseZipStructure(file.absolutePath, password.ifEmpty { null })
-            FileContentState.ZipSuccess(root, entity, password)
-        } catch (e: UnsupportedOperationException) {
-            FileContentState.Error(e.message ?: "This archive type is not supported yet")
-        }
-    }
-
-    /** DOCX/PPTX are rendered by a WebView from a base64 blob, so very large ones fall back to the archive tree. */
-    private fun webDocument(
-        file: File,
-        entity: RecentFileEntity,
-        password: String,
-        make: (String) -> FileContentState
-    ): FileContentState {
-        if (file.length() > MAX_WEB_DOCUMENT_BYTES) return openArchive(file, entity, password)
-        val base64 = android.util.Base64.encodeToString(file.readBytes(), android.util.Base64.NO_WRAP)
-        return make(base64)
-    }
-
-    private fun identifyOnly(file: File, entity: RecentFileEntity, detection: Detection, note: String?): FileContentState {
-        val (hex, ascii) = generateHexDump(file)
-        return FileContentState.BinarySuccess(hex, ascii, entity, detection.spec.displayName, note)
-    }
-
-    fun openZipEntry(parentZipEntity: RecentFileEntity, node: FileManager.ZipNode, password: String = "") {
+    fun openZipEntry(parentZipEntity: RecentFileEntity, node: ArchiveNode, password: String = "") {
         _currentFileState.value = FileContentState.Loading
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -708,7 +456,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (!tempZipExtractsDir.exists()) {
                     tempZipExtractsDir.mkdirs()
                 }
-                
+
                 if (node.unsafe) {
                     _currentFileState.value = FileContentState.Error("This entry has an unsafe path and was not extracted.")
                     _navigationEvent.send(NavigationEvent.NavigateToPreview(_currentFileState.value))
@@ -717,7 +465,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val uniqueSubName = "${parentZipEntity.id}_${PathGuard.cacheKey(node.path)}_${PathGuard.sanitizeFileName(node.name, "entry")}"
                 val ext = node.name.substringAfterLast('.', "").lowercase()
                 val localFile = File(tempZipExtractsDir, uniqueSubName)
-                
+
                 val pwdParam = if (password.isNotEmpty()) password else null
                 val extracted = fileManager.extractZipEntry(parentZipEntity.path, node.path, localFile, pwdParam)
                 if (extracted && localFile.exists()) {
@@ -731,10 +479,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         parentZipPath = parentZipEntity.path,
                         zipEntryPath = node.path
                     )
-                    
+
                     val insertedId = repository.insertRecentFile(zipEntryEntity)
                     val savedEntity = zipEntryEntity.copy(id = insertedId.toInt())
-                    
+
                     openFile(savedEntity)
                 } else {
                     _currentFileState.value = FileContentState.Error("Could not extract entry: ${node.name}")
@@ -810,9 +558,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     _fileEvent.value = "This sheet is read-only, so nothing was saved."
                     return@launch
                 }
-                fileManager.saveDelimited(fileEntity.path, newRows, table)
-
                 val diskFile = File(fileEntity.path)
+                val detection = FormatDetector.detect(diskFile, diskFile.name)
+                val saveResult = FormatRegistry.save(
+                    detection,
+                    FormatSaveRequest.Delimited(
+                        file = diskFile,
+                        rows = newRows,
+                        charsetName = table.charset.name(),
+                        hadBom = table.hadBom,
+                        delimiter = table.delimiter,
+                        lineEnd = table.lineEnd
+                    )
+                )
+                if (saveResult != FormatOperationResult.Completed) {
+                    _fileEvent.value = when (saveResult) {
+                        is FormatOperationResult.Unsupported -> saveResult.reason
+                        is FormatOperationResult.Failed -> "Error saving file: ${saveResult.message}"
+                        FormatOperationResult.Completed -> ""
+                    }
+                    return@launch
+                }
                 val updatedEntity = fileEntity.copy(size = diskFile.length(), lastOpened = System.currentTimeMillis())
                 syncBackToArchive(fileEntity, diskFile)
                 repository.insertRecentFile(updatedEntity)
@@ -880,7 +646,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     ?: current?.charsetName?.let { runCatching { java.nio.charset.Charset.forName(it) }.getOrNull() }
                     ?: Charsets.UTF_8
                 val writeBom = current?.hadBom == true
-                fileManager.saveText(fileEntity.path, newContent, charset, writeBom)
+                val detection = FormatDetector.detect(diskFile, diskFile.name)
+                val saveResult = FormatRegistry.save(
+                    detection,
+                    FormatSaveRequest.Text(
+                        file = diskFile,
+                        content = newContent,
+                        charsetName = charset.name(),
+                        hadBom = writeBom
+                    )
+                )
+                if (saveResult != FormatOperationResult.Completed) {
+                    _fileEvent.value = when (saveResult) {
+                        is FormatOperationResult.Unsupported -> saveResult.reason
+                        is FormatOperationResult.Failed -> "Error saving file: ${saveResult.message}"
+                        FormatOperationResult.Completed -> ""
+                    }
+                    return@launch
+                }
 
                 val updatedEntity = fileEntity.copy(size = diskFile.length(), lastOpened = System.currentTimeMillis())
 
@@ -1179,10 +962,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
                 val id = repository.insertRecentFile(recent)
                 val finalRecent = recent.copy(id = if (existing != null) existing.id else id.toInt())
-                
+
                 // Index the newly imported file path
                 indexFile(destFile.absolutePath)
-                
+
                 // Automatically trigger opening the imported file!
                 openFile(finalRecent)
                 // Comment out imported popup/toast based on user request
@@ -1220,14 +1003,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _isSearchingDevice.value = false
             return
         }
-        
+
         searchJob = viewModelScope.launch(Dispatchers.Default) {
             kotlinx.coroutines.delay(150L) // 150ms debounce
             _isSearchingDevice.value = true
             try {
                 val pattern = query.trim()
                 val resultsList = mutableListOf<File>()
-                
+
                 // If the indexed list is completely empty, let's build it immediately on Dispatchers.IO
                 val isEmpty = synchronized(allIndexedFiles) { allIndexedFiles.isEmpty() }
                 if (isEmpty) {
@@ -1289,7 +1072,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     isSample = false
                 )
                 val id = repository.insertRecentFile(recentFile)
-                
+
                 // Index this file dynamically
                 indexFile(file.absolutePath)
 
@@ -1303,13 +1086,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private companion object {
         /** Preview window for text. Beyond this the view is flagged truncated and made read-only. */
-        const val TEXT_PREVIEW_MAX_CHARS = 250_000
 
         /** Search index limits (the old values, depth 3 and 5,000 files, hid most of a real device). */
         const val INDEX_MAX_DEPTH = 8
         const val INDEX_MAX_FILES = 60_000
 
-        /** DOCX/PPTX go to a WebView as base64 (about 2.7x memory), so cap what we hand over. */
-        const val MAX_WEB_DOCUMENT_BYTES = 25L * 1024 * 1024
     }
 }

@@ -1,46 +1,36 @@
-# File Claw: Design System (v1.1.0)
+# UI design source map
 
-**Direction:** Claude's warm, editorial calm, with a restrained glass layer. Premium means *quiet*: few colours,
-generous space, hairlines instead of shadows, motion that explains rather than decorates.
+This page records the design tokens in the current app source. It is not a mandate to redesign screens as part of a bug fix, and it makes no claim that contrast, animation timing, or frame rate has been measured on a device.
 
-## Colour tokens
-| Token | Light | Dark | Use |
-|---|---|---|---|
-| `background` | `#FAF9F5` | `#181715` | canvas |
-| `surface` | `#FAF9F5` | `#252320` | sheets, dialogs |
-| `primary` | `#CC785C` (terracotta) | `#CC785C` | actions, selection |
-| `onBackground` | `#141413` | `#FAF9F5` | text |
-| `outline` | `#E6DFD8` | `#2D2C2A` | hairlines |
-| `secondary` (dark) | n/a | `#E8A55A` | accent |
+## Theme and colors
 
-## Glass tokens (`ui/theme/Glass.kt`)
-| Token | Light | Dark |
+The app theme is in `app/src/main/java/com/example/ui/theme/`:
+
+| Source token | Value | Use indicated in source |
 |---|---|---|
-| `fill` | white @ 62% | `#2B2926` @ 58% |
-| `fillStrong` | white @ 80% | `#32302C` @ 80% |
-| `strokeStart → strokeEnd` | white 95% → terracotta 20% | white 18% → white 4% |
-| `sheen` (top highlight) | white @ 55% | white @ 7% |
-| `glowA/B/C` (ambient) | terracotta 22%, amber 18%, lavender 16% | terracotta 28%, amber 14%, indigo 14% |
+| `ClaudeTerracotta` | `#CC785C` | Main light/dark primary accent |
+| `ClaudeSoftTomato` | `#A9583E` | Light secondary accent |
+| `ClaudeAlabaster` | `#FAF9F5` | Light canvas/background |
+| `ClaudeCharcoal` | `#141413` | Light foreground text |
+| `ClaudeMutedText` | `#6C6A64` | Muted light text |
+| `ClaudeSandBorder` | `#E6DFD8` | Light outline |
+| `ClaudeOnyx` | `#181715` | Dark background |
+| `ClaudeDarkSurface` | `#252320` | Dark elevated surface |
+| `ClaudeDarkBorder` | `#2D2C2A` | Dark outline |
+| `ClaudeDarkText` | `#FAF9F5` | Dark foreground text |
+| `ClaudeOrangeAccent` | `#E8A55A` | Dark secondary accent |
 
-**How the glass is built:** translucent fill + top sheen gradient + gradient hairline border (`Modifier.glass()`),
-over a backdrop of three large radial gradients (`GlassBackdrop`). Radial gradients instead of
-`RenderEffect` blur: identical look on API 26+, near-zero GPU cost, and text is never blurred.
+The same source defines additional selected/background colors. `FilesClawTheme` selects Light, Dark, or System color schemes and synchronizes status/navigation bar icon contrast with the in-app theme.
 
-## Rules
-1. **Reading surfaces are opaque.** Document, code, hex and editor viewers keep solid `background` for legibility.
-2. **Glass is for chrome and cards:** app bars, cards, sheets, the permission screen.
-3. One accent (terracotta). Amber only in dark mode.
-4. 1 dp hairlines, 16 dp card radius, 8 dp spacing grid. Elevation via contrast, not shadow.
-5. Contrast: body text ≥ 4.5:1 on its actual backdrop (check the glass fill *over* the glow, not in isolation).
-6. Motion: ≤ 250 ms, ease-out; no motion that blocks input.
-7. Notices (truncated, read-only, converted, view-only) use one component: `NoticeBanner`.
+## Glass surfaces
 
-## Rollout status
-| Area | Status |
-|---|---|
-| Tokens, `glass()`, `GlassBackdrop`, theme provider | ✅ done |
-| `ClaudeCard`, `ClaudeAppBar` | ✅ glass |
-| Permission screen | ✅ backdrop |
-| Root-level backdrop behind all list screens | ⏳ needs a NavHost transition policy first: Scaffolds currently paint an opaque `background`, and making them transparent would show overlapped screens during crossfades |
-| Bottom sheets / dialogs / search field | ⏳ |
-| On-device contrast + 60 fps verification | ⏳ not yet measured |
+`Glass.kt` builds translucent surfaces from fills, a top sheen, a one-dp gradient border, and three ambient radial gradients. The tokens are `LightGlass` and `DarkGlass`; `Modifier.glass()` and `GlassBackdrop()` are shared implementation points. The backdrop uses gradients rather than a blur API.
+
+## Ownership and safety
+
+- Shared UI components belong in `ui/component/` and shared theme code in `ui/theme/`.
+- Reading surfaces should remain legible; do not make a PDF/DOCX canvas transparent or change a viewer's behavior as a side effect of a format refactor.
+- PDF is intentionally light-only in the current PDF viewer. DOCX and other supported text/document surfaces have their existing theme behavior; preserve it unless the user asks otherwise.
+- Prefer using current tokens and components for a requested UI fix. This preview-repair task does not authorize unrelated visual changes.
+
+No on-device contrast, animation, or performance measurement was recorded during this pass. The source values above should be checked against actual UI before making product claims.
