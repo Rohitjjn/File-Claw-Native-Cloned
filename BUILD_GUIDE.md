@@ -1,58 +1,56 @@
-# Build guide
+# Build and verification guide
+
+This guide describes the build configuration in this checkout. It does not claim that the current working tree has built successfully; see [`docs/STATUS.md`](docs/STATUS.md) for the exact current result.
 
 ## Requirements
-JDK 17 · Android SDK (platform 34, build-tools 34) via Android Studio or `sdkmanager` · internet access for the first Gradle sync.
-Set `ANDROID_HOME` (or `local.properties` → `sdk.dir=...`).
 
-## One command
-```
-./gradlew assembleDebug
-```
-APK: `app/build/outputs/apk/debug/app-debug.apk`. No keystore needed: without `debug.keystore.base64` the AGP debug key is used.
+- JDK **17**. The Android Gradle Plugin is `8.4.2`; the project uses Gradle wrapper **8.7** and Kotlin **1.9.22**.
+- Android SDK platform **34**. The app compiles against and targets API 34 and has `minSdk 26`.
+- Network access during the first Gradle sync/build so Gradle can download plugins and dependencies from the configured repositories.
+- Android Studio is the simplest way to install the SDK and choose a device. A device or emulator is needed only for installation and runtime checks, not for local unit tests or APK assembly.
 
-## Quality Gate (run this first on a new machine; cycle 1 could not run it)
-```
-./gradlew build                        # compile + all checks
-./gradlew testDebugUnitTest            # 91 JUnit tests (core/)
-./gradlew jacocoCoreVerify             # fails below 80 % line coverage of com.example.core
-./gradlew lintDebug detekt             # lint must have 0 errors; detekt is advisory for now
-./gradlew assembleDebug
-```
-If the first build fails to compile, the likely places are listed in `docs/TODO.md` → KNOWN ISSUES #1.
+Set `ANDROID_HOME` (or `ANDROID_SDK_ROOT`) to the SDK directory, or let Android Studio create a local `local.properties` with `sdk.dir`. Do not commit local SDK paths. The wrapper script is executable in the current checkout; if a checkout loses that file mode, run `chmod +x gradlew`.
 
-## Verify the core without Gradle
-```
-KOTLINC=/path/to/kotlinc/bin/kotlinc JACOCO_DIR=/path/to/jacoco ./tools/local-verify/verify-core.sh
+## Debug build and quality checks
+
+Run from the repository root:
+
+```bash
+./gradlew :app:compileDebugKotlin --no-daemon --max-workers=1
+./gradlew :app:testDebugUnitTest --no-daemon --max-workers=1
+./gradlew :app:assembleDebug --no-daemon --max-workers=1
+./gradlew :app:lintDebug :app:detekt --no-daemon --max-workers=1
+./gradlew :app:jacocoCoreVerify --no-daemon --max-workers=1
 ```
 
-## Release build
+The expected debug APK is `app/build/outputs/apk/debug/app-debug.apk`. `:app:jacocoCoreVerify` is configured to require at least 80% line coverage for `com.example.core`. Detekt is configured for the core source tree and currently uses `ignoreFailures = true`; it is advisory until that configuration changes.
+
+For a single all-in-one check, the same task can be invoked in one Gradle process, but separate commands make it easier to see which stage failed:
+
+```bash
+./gradlew :app:compileDebugKotlin :app:testDebugUnitTest :app:assembleDebug --no-daemon --max-workers=1
 ```
-export FILECLAW_KEYSTORE=/path/to/release.jks FILECLAW_STORE_PASSWORD=... FILECLAW_KEY_ALIAS=... FILECLAW_KEY_PASSWORD=...
-./gradlew assembleRelease
-```
-Without those variables the release APK is signed with the debug key (sideloading only).
 
-## Automated GitHub Actions Release Workflow
-A manual GitHub Actions workflow is provided in `.github/workflows/build-and-release.yml`.
+## Release builds and signing
 
-### How to run:
-1. Go to your repository on GitHub.
-2. Click on the **Actions** tab.
-3. In the left sidebar, select **Build and Release Android App**.
-4. Click **Run workflow**:
-   - **App Version Name**: Enter your release version (e.g., `1.2.0` or `2.0.0`).
-   - **App Version Code**: Enter the numeric version code (e.g., `3`, or leave blank to auto-increment).
-   - **Build Type**: Choose `release` (default) or `debug`.
-   - **Build Bundle**: Check to also generate `.aab` (Android App Bundle).
-   - **Release Title & Notes**: Optionally add custom title and changelog notes.
-5. Click the green **Run workflow** button.
+`app/build.gradle.kts` reads release signing values from environment variables:
 
-### What happens:
-- GitHub Actions compiles the Android app targeting all modern architectures (`arm64-v8a`, `armeabi-v7a`, `x86_64`, `x86`).
-- It generates the universal Release APK (`FilesClaw-v<version>-release.apk`) and Android App Bundle (`FilesClaw-v<version>.aab`).
-- It computes SHA-256 checksums for security verification.
-- It automatically creates a new **GitHub Release** tagged `v<version>` and uploads all artifacts directly to the Release section so anyone can easily download and install the app!
-- If optional signing secrets (`FILECLAW_KEYSTORE_BASE64`, `FILECLAW_STORE_PASSWORD`, etc.) are configured in repository Settings → Secrets, it uses them; otherwise, it signs with the fallback key so sideloading works immediately out of the box.
+- `FILECLAW_KEYSTORE`
+- `FILECLAW_STORE_PASSWORD`
+- `FILECLAW_KEY_ALIAS`
+- `FILECLAW_KEY_PASSWORD`
 
-## Benchmarks / generated docs
-`tools/bench/CoreBench.kt` (old vs new algorithms) · `tools/GenFormatDocs.kt` (regenerates the format matrix). Both compile against `com.example.core` with `kotlinc`.
+Without a supplied release keystore, the build falls back to a debug key. That may be suitable for local installation but is **not a production Play Store signing identity**. Never place signing secrets in source control or chat.
+
+The workflow at `.github/workflows/build-and-release.yml` is manually dispatched. It sets up Java 17, accepts a version name/code and debug/release choice, builds an APK, can also build a release AAB, generates SHA-256 checksums, and publishes or updates a GitHub Release. Running it publishes artifacts; do so only with the appropriate release approval.
+
+## Useful source locations
+
+- Versions and plugin aliases: `gradle/libs.versions.toml`.
+- Wrapper version: `gradle/wrapper/gradle-wrapper.properties`.
+- App ID, SDK levels, app versions, build types and dependencies: `app/build.gradle.kts`.
+- Manifest and permissions: `app/src/main/AndroidManifest.xml`.
+- Unit tests: `app/src/test/java/`.
+- Room schema export location: `app/schemas/`.
+
+The checked-in Gradle configuration is a single `:app` module. This guide does not authorize changing modules, application identity, SDK levels, signing, or dependencies.

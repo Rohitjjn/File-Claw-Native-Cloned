@@ -1,63 +1,56 @@
-# File Claw: Architecture (v1.1.0)
+# Architecture and source map
 
-## Principle
-Everything that can be decided without the Android framework lives in **`com.example.core`**: pure Kotlin,
-no `android.*` imports, unit-tested on the plain JVM. The Android layers are thin adapters around it.
+File Claw is a single-module Android application. The current module is `:app`; production source stays under `app/src/main/java/com/example/`. This page is a map to the implementation, not a proposed redesign.
 
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│ ui/            Compose screens + viewers (Home, AllFiles, Search, Settings,│
-│                FilePreview, Editor, UniversalViewers, theme/Glass.kt)       │
-├──────────────────────────────────────────────────────────────────────────┤
-│ viewmodel/     MainViewModel: routing (FormatDetector -> FileContentState),│
-│                saves, recents, search index, intent import                  │
-├───────────────────────────────┬──────────────────────────────────────────┤
-│ services/                     │ data/ + utils/                            │
-│  FileManager (facade)         │  Room (recent_files, settings), repository │
-│  SqliteBrowser                │  CacheManager, SmartCacheWorker            │
-├───────────────────────────────┴──────────────────────────────────────────┤
-│ core/   (pure Kotlin; historical 98% coverage, not rerun for Loop 6)       │
-│  format/   FormatRegistry · FormatDetector · MagicSniffer · TextHeuristics │
-│  io/       TextLoader · TextEncoding · TextSaver · TextWindowReader ·      │
-│            AtomicFileWriter                                                │
-│  archive/  ArchiveLimits · ArchivePaths · LimitedInputStream ·             │
-│            ArchiveTreeBuilder                                              │
-│  csv/      DelimitedParser · DelimitedWriter                               │
-│  security/ PathGuard                                                       │
-│  text/     RtfExtractor · OdfTextExtractor · EpubReader · HtmlSanitizer    │
-│  model3d/  MeshParser (STL, OBJ)                                           │
-│  sqlite/   SqlIdentifier                                                   │
-└──────────────────────────────────────────────────────────────────────────┘
-```
+## Main request flow
 
-## Opening a file (the universal opener pipeline)
-1. **Intake.** A file arrives from the picker, the tree, search, recents, a shortcut, or another app
-   (`ACTION_VIEW`). External `content://` URIs are copied once into `filesDir/imported/` under a sanitised,
-   non-colliding name (`PathGuard`). Handled in `onCreate` / `onNewIntent`, never in a Compose effect.
-2. **Detect** (`FormatDetector.detect`). Reads at most 8 KB. Order: strong binary signature (always wins) →
-   meaningful extension (checked against content) → weak text signature (only if the extension says
-   nothing) → text/binary heuristics. ZIP containers are refined by entry names (docx/xlsx/pptx/odf/epub/apk).
-   Result carries `FormatSpec`, `Confidence`, and `mismatch` (extension disagrees with content).
-3. **Route** (`MainViewModel.buildContentState`): `FileKind` → a `FileContentState` the preview screen renders.
-4. **Render.** Compose viewers, or sandboxed WebViews for PDF (bundled PDF.js via `WebViewAssetLoader`), DOCX / PPTX / spreadsheet grid, Markdown, and HTML. TXT/Markdown previews use bounded HTML windows; truncated TXT/Markdown search streams the original file and opens bounded excerpts at stored match offsets.
-5. **Save** (editable states only): `AtomicFileWriter` (temp file + fsync + atomic rename); charset and BOM are
-   preserved; truncated or converted views are read-only and the ViewModel refuses to save them.
+1. `MainActivity` is the Android entry point. It receives app launches and supported file intents, then hosts the Compose UI.
+2. `platform/intent/IncomingIntentRouter.kt` and the storage/permission helpers prepare file input for the app.
+3. `viewmodel/MainViewModel.kt` coordinates recent-file persistence and open operations. `core/format/FormatDetector.kt` identifies the content and selects a `FormatSpec` from the existing `core/format/FormatRegistry.kt` metadata.
+4. `MainViewModel` sends a `FormatOpenRequest` through the extension functions in `formats/registry/FormatRegistryOperations.kt`. The core registry owns the single handler-ID route table; default providers are assembled by `formats/registry/DefaultFormatHandlers.kt`.
+5. A family handler returns an existing `domain/preview/FileContentState`. `feature/preview/FilePreviewScreen.kt` selects the matching existing family viewer.
 
-## Data model
-`FileContentState` (sealed) is the single contract between routing and rendering. Text and sheets carry
-`truncated` / `readOnlyReason` **as flags, never as text inside the content**.
+Format support is not inferred from an extension list alone. Detection can use file signatures and text heuristics, and `FormatSpec.support` describes current metadata status. See [`FILE_FORMATS.md`](FILE_FORMATS.md).
 
-## Safety boundaries
-| Boundary | Mechanism |
-|---|---|
-| Huge files | 8 KB sniff, 250k-char preview cap with `truncated` flag, `TextWindowReader` for bounded search excerpts, streamed full-file TXT/Markdown search with at most 10k retained offsets, 50k-row grid cap |
-| Archives | entry cap, per-entry size and ratio limits, depth cap, `copyLimited`, zip-slip flagging, cache-chosen output names |
-| Writes | atomic replace everywhere (text, delimited, ZIP entry update) |
-| WebViews | no INTERNET permission; HTML scripts off by default and no bridge; Markdown sanitized with a narrow copy/search bridge; PDF.js and DOCX use trusted local bridges; DOCX cross-file/content access off; external top-level navigation blocked |
-| Database | SQLite opened read-only, identifiers quoted, only generated SELECTs |
-| Persistence | Room fails fast on schema change without a migration (no silent wipe); backup disabled |
+## Package responsibilities
 
-## Known structural debt (see TODO.md)
-`FilePreviewScreen.kt` is now roughly 4,100 lines after the Loop 6 readers; navigation is route-without-arguments backed by one shared
-ViewModel state; imported copies don't write back to the source URI; DOCX/WebView renderers pass whole documents
-to JS as base64 (size-capped, not streamed).
+| Package | Responsibility | Examples |
+|---|---|---|
+| `core/archive/` | Archive path validation, extraction quotas, safe tree construction | `ArchivePaths`, `ArchiveLimits`, `ArchiveTreeBuilder` |
+| `core/format/` | Format IDs/metadata, content detection, the single route table | `FormatRegistry`, `FormatDetector` |
+| `core/io/` | Bounded text reads, encoding, atomic writes/exports, range parsing | `TextLoader`, `TextSaver`, `HttpRange`, `AtomicFileWriter` |
+| `core/search/` | Shared file-name ranking | `FileSearchRanker` |
+| `core/security/` | Path guards and HTML escaping/sanitizing | `PathGuard`, `HtmlSanitizer` |
+| `data/` | Room entities, DAO interfaces, database, repository | `AppDatabase`, `RecentFileEntity`, `AppRepository` |
+| `domain/preview/` | Preview state and typed handler requests, capabilities, results | `FileContentState`, `FormatHandler` |
+| `feature/` | App screens and user flows; shared preview composition | `feature/home/`, `feature/preview/`, `feature/navigation/` |
+| `formats/<family>/` | Family-owned parsing, policy, handlers, loaders, and viewers | `formats/pdf/`, `formats/docx/`, `formats/csv/` |
+| `formats/registry/` | The default handler provider and typed extensions on the existing registry | `DefaultFormatHandlers` |
+| `platform/` | Shared Android services and adapters | `storage/`, `intent/`, `print/`, `share/`, `webview/` |
+| `ui/component/`, `ui/theme/` | Shared Compose components, tokens, and theme | `ClaudeComponents.kt`, `Color.kt`, `Glass.kt`, `Theme.kt` |
+| `viewmodel/` | App-level coordination and UI state | `MainViewModel` |
+
+Format-specific parsers and rendering decisions belong in a format-family package. The screen layer may connect shared UI controls to a family viewer, but it should not acquire format-specific parsing or processing.
+
+## Important ownership details
+
+- `core/format/FormatRegistry.kt` stores metadata and the single runtime route map through the small `FormatRouteHandler` contract. `domain/preview/FormatHandler` extends that contract with typed operations. There is no second application-level route registry.
+- `MainViewModel` remains the broad app coordinator. It owns app-wide recent-file, search, edit, and navigation coordination; it should not absorb a family parser or WebView renderer.
+- `feature/preview/FilePreviewScreen.kt` remains the cross-family composition and shared viewer-chrome surface. Individual viewer implementations live under `formats/<family>/ui/` where extracted.
+- Shared storage and archive operations are in `platform/storage/FileManager.kt`; archive limits and path safety are in `core/archive/`.
+- Printing, sharing, clipboard, permissions, incoming intents, lifecycle policy, and local WebView assets have shared adapters under `platform/`.
+- Room state is isolated under `data/`; app preferences and cache behavior remain with their existing owners. See [`DATABASE.md`](DATABASE.md).
+- Offline HTML/JavaScript assets are under `app/src/main/assets/`. Preserve them and their license notices.
+
+## Format-family package map
+
+Current family areas include `archive`, `binary`, `common`, `csv`, `doc`, `docx`, `epub`, `font`, `html`, `image`, `legacyoffice`, `markdown`, `media`, `model3d`, `odf`, `ooxml`, `pdf`, `pptx`, `rtf`, `sqlite`, `svg`, `text`, `xls`, and `xlsx`. A package exists only where the source has an actual responsibility; do not create empty families merely to match a diagram.
+
+## Tests and assets
+
+- Local JVM tests mirror `core`, `data`, `feature`, `formats`, and `platform` responsibilities under `app/src/test/java/`.
+- No Android instrumentation-test source tree is present at the time of this documentation pass.
+- WebView pages and bundled libraries live in `app/src/main/assets/editor/` and `app/src/main/assets/pdfjs/`.
+- Third-party license/attribution records are retained in `THIRD_PARTY_NOTICES.md` and alongside bundled assets. Do not remove or regenerate legal notices as ordinary documentation.
+
+For the existing PDF and DOCX call chains, assets, and remaining runtime checks, see [`PREVIEW_PIPELINES.md`](PREVIEW_PIPELINES.md).
