@@ -1,6 +1,7 @@
 package com.example.data
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 class AppRepository(
@@ -24,14 +25,14 @@ class AppRepository(
             if (file.id > 0) file else file.copy(id = 0)
         }
         val id = recentFileDao.insertRecentFile(entityToInsert)
-        
+
         // Trim history based on settings limit
         val currentLimit = getSettingsDirect().historyLimit
         val count = recentFileDao.getRecentFileCount()
         if (count > currentLimit) {
             val toDelete = count - currentLimit
             val oldest = recentFileDao.getOldestFiles(toDelete)
-            oldest.forEach { 
+            oldest.forEach {
                 recentFileDao.deleteRecentFileById(it.id)
             }
         }
@@ -42,12 +43,23 @@ class AppRepository(
         return recentFileDao.getRecentFileByPath(path)
     }
 
+    suspend fun getMostRecentFile(): RecentFileEntity? =
+        recentFileDao.getAllRecentFiles().first().firstOrNull()
+
     suspend fun removeRecentFileById(id: Int) {
         recentFileDao.deleteRecentFileById(id)
     }
 
     suspend fun removeRecentFileByPath(path: String) {
         recentFileDao.deleteRecentFileByPath(path)
+    }
+
+    /** Replaces an image-history path without changing the existing folder-swipe history semantics. */
+    suspend fun replaceRecentFilePath(previousPath: String, updatedFile: RecentFileEntity) {
+        recentFileDao.getRecentFileByPath(previousPath)?.let {
+            recentFileDao.deleteRecentFileByPath(previousPath)
+        }
+        recentFileDao.insertRecentFile(updatedFile.copy(id = 0))
     }
 
     suspend fun clearHistory() {

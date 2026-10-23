@@ -31,11 +31,20 @@ data class FormatSpec(
     val extensions: List<String>
 )
 
+/** Minimal routing identity shared with the app's single format-family handler contract. */
+interface FormatRouteHandler {
+    val formatIds: Set<String>
+}
+
 object FormatRegistry {
 
     private val specs = ArrayList<FormatSpec>()
     private val byId = HashMap<String, FormatSpec>()
     private val byExt = HashMap<String, FormatSpec>()
+
+    /** Runtime family handlers are installed once by the application bootstrap. */
+    @Volatile
+    private var handlersById: Map<String, FormatRouteHandler> = emptyMap()
 
     private fun spec(
         id: String,
@@ -145,6 +154,30 @@ object FormatRegistry {
     val all: List<FormatSpec> get() = specs
 
     fun byId(id: String): FormatSpec? = byId[id]
+
+    /** Installs the single application handler table, rejecting unknown and multiply-owned IDs. */
+    @Synchronized
+    fun registerHandlers(handlers: Collection<FormatRouteHandler>) {
+        val next = linkedMapOf<String, FormatRouteHandler>()
+        handlers.forEach { handler ->
+            require(handler.formatIds.isNotEmpty()) { "A format handler must own at least one format ID." }
+            handler.formatIds.forEach { id ->
+                val normalized = id.lowercase()
+                require(normalized.isNotBlank()) { "A format ID cannot be blank." }
+                require(byId.containsKey(normalized)) { "No format metadata exists for '$normalized'." }
+                require(next.putIfAbsent(normalized, handler) == null) {
+                    "More than one handler is registered for format ID '$normalized'."
+                }
+            }
+        }
+        handlersById = next.toMap()
+    }
+
+    val registeredHandlerIds: Set<String> get() = handlersById.keys
+
+    fun handlerFor(formatId: String): FormatRouteHandler? = handlersById[formatId.lowercase()]
+
+    fun handlerFor(detection: Detection): FormatRouteHandler? = handlerFor(detection.spec.id)
 
     fun byExtension(ext: String): FormatSpec? = byExt[ext.lowercase().trimStart('.')]
 

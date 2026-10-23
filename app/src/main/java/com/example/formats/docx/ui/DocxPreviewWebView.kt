@@ -1,0 +1,463 @@
+package com.example.formats.docx.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.data.RecentFileEntity
+import com.example.viewmodel.MainViewModel
+import java.io.File
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.viewinterop.AndroidView
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import com.example.formats.common.search.InViewerSearchCommandPolicy
+import com.example.formats.docx.DocxTextRecovery
+import com.example.formats.text.ui.PlainTextPreview
+import com.example.platform.webview.MimeAwareAssetsPathHandler
+
+@Composable
+fun DocxPreviewWebView(
+    base64Docx: String,
+    fileEntity: RecentFileEntity,
+    isNightMode: Boolean,
+    viewModel: MainViewModel,
+    modifier: Modifier = Modifier,
+    onPageChanged: (Int, Int) -> Unit = { _, _ -> },
+    scrollToPage: Int? = null,
+    onScrollProgressHandled: () -> Unit = {},
+    searchQuery: String = "",
+    searchTriggerNext: Int = 0,
+    searchTriggerPrev: Int = 0,
+    onSearchResultCount: (Int, Int, Boolean) -> Unit = { _, _, _ -> },
+    zoomFactor: Float = 1.0f,
+    // Loop 12 (Bug A): true while a pinch gesture is physically in progress. While it
+    // is set, zoom updates go to the cheap compositor-only preview path instead of
+    // re-laying-out the whole document per frame; the settle transition commits once.
+    pinchActive: Boolean = false,
+    onWebViewCreated: (android.webkit.WebView?) -> Unit = {},
+    onDocumentReady: () -> Unit = {},
+    onSingleTap: () -> Unit = {},
+    onZoomChanged: (Float) -> Unit = {},
+    onPinchZoom: (Float) -> Unit = {},
+    onPinchSettled: () -> Unit = {},
+    onDoubleTap: () -> Unit = {},
+    onRendererFallback: (Boolean) -> Unit = {}
+) {
+    var isWebViewLoading by remember(base64Docx) { mutableStateOf(true) }
+    var webViewRef by remember(base64Docx) { mutableStateOf<android.webkit.WebView?>(null) }
+    var pureKotlinFallback by remember(base64Docx) { mutableStateOf<com.example.formats.docx.DocxExtractor.ExtractedDocx?>(null) }
+    // Loop 14: the plain-text view is an honest RECOVERY state, never a normal
+    // preview. The renderer failure reason is surfaced verbatim (no document
+    // content, no sensitive data) and Retry rebuilds the WebView from scratch.
+    var fallbackReason by remember(base64Docx) { mutableStateOf<String?>(null) }
+    var docxReloadKey by remember(base64Docx) { mutableIntStateOf(0) }
+    // Ledger of what the renderer's search engine has already been told (Loop 12, Bug
+    // B): navigation triggers now issue ONLY next/prev deltas; re-issuing searchWord()
+    // per arrow press used to reset the match index to 0 so the counter stuck at 2/N.
+    var issuedSearch by remember(base64Docx) { mutableStateOf(InViewerSearchCommandPolicy.Issued()) }
+    fun retryDocxRender() {
+        pureKotlinFallback = null
+        fallbackReason = null
+        isWebViewLoading = true
+        issuedSearch = InViewerSearchCommandPolicy.Issued()
+        docxReloadKey++
+    }
+    // Display-frame throttle (~30/s) for the pinch preview path (Bug E: coalescing).
+    var lastDisplayDispatchNanos by remember { androidx.compose.runtime.mutableLongStateOf(0L) }
+    val context = LocalContext.current
+    val latestSearchResultCallback = androidx.compose.runtime.rememberUpdatedState(onSearchResultCount)
+    val latestPageChangedCallback = androidx.compose.runtime.rememberUpdatedState(onPageChanged)
+    val latestDocumentReadyCallback = androidx.compose.runtime.rememberUpdatedState(onDocumentReady)
+    val latestWebViewCreatedCallback = androidx.compose.runtime.rememberUpdatedState(onWebViewCreated)
+    val latestSingleTapCallback = androidx.compose.runtime.rememberUpdatedState(onSingleTap)
+    val latestZoomChangedCallback = androidx.compose.runtime.rememberUpdatedState(onZoomChanged)
+    val latestPinchZoomCallback = androidx.compose.runtime.rememberUpdatedState(onPinchZoom)
+    val latestPinchSettledCallback = androidx.compose.runtime.rememberUpdatedState(onPinchSettled)
+    val latestDoubleTapCallback = androidx.compose.runtime.rememberUpdatedState(onDoubleTap)
+    val latestRendererFallbackCallback = androidx.compose.runtime.rememberUpdatedState(onRendererFallback)
+    // Fresh values for the WebViewClient closures created once in the factory: reading
+    // them at callback time prevents a stale initial zoom/theme being re-applied after
+    // the document finishes loading (Loop 10).
+    val latestZoomForPageLoad = androidx.compose.runtime.rememberUpdatedState(zoomFactor)
+    val latestNightModeForPageLoad = androidx.compose.runtime.rememberUpdatedState(isNightMode)
+
+    // Loop 12 (Bug B): query changes search exactly once; arrow presses issue only
+    // next/prev deltas, so all N matches stay reachable in both directions.
+    LaunchedEffect(webViewRef, isWebViewLoading, searchQuery, searchTriggerNext, searchTriggerPrev, pureKotlinFallback) {
+        val webView = webViewRef
+        if (webView != null && !isWebViewLoading && pureKotlinFallback == null) {
+            val plan = InViewerSearchCommandPolicy.plan(issuedSearch, searchQuery, searchTriggerNext, searchTriggerPrev)
+            if (!plan.isEmpty) {
+                if (plan.search && issuedSearch.query != null) {
+                    // Debounce rapid typing before re-highlighting the whole DOM.
+                    kotlinx.coroutines.delay(150)
+                    if (!kotlin.coroutines.coroutineContext.isActive) return@LaunchedEffect
+                }
+                val script = buildString {
+                    if (plan.search) {
+                        append("searchWord(${org.json.JSONObject.quote(searchQuery)});")
+                    }
+                    repeat(plan.nextSteps) { append("nextSearchMatch();") }
+                    repeat(plan.prevSteps) { append("prevSearchMatch();") }
+                }
+                webView.evaluateJavascript(script, null)
+            }
+            // Always advance the ledger — including no-op plans, so a trigger counter
+            // reset (file change / find closed) is absorbed instead of replayed.
+            issuedSearch = plan.issued
+        }
+    }
+    LaunchedEffect(webViewRef, isWebViewLoading, isNightMode, pureKotlinFallback) {
+        if (webViewRef != null && !isWebViewLoading && pureKotlinFallback == null) {
+            webViewRef?.evaluateJavascript("setDarkMode($isNightMode);", null)
+        }
+    }
+    // Loop 12 (Bug A): two-phase zoom pipeline.
+    //  - pinchActive == true  -> setZoomDisplay(): compositor-only transform preview,
+    //    throttled to ~30 dispatches/s so a large DOCX stops re-laying-out per frame.
+    //  - pinchActive == false -> setZoom(): the authoritative commit (toolbar +/-,
+    //    percentage dialog, page load, and the settle transition after a pinch).
+    LaunchedEffect(webViewRef, isWebViewLoading, zoomFactor, pinchActive, pureKotlinFallback) {
+        val webView = webViewRef
+        if (webView != null && !isWebViewLoading && pureKotlinFallback == null) {
+            if (pinchActive) {
+                val now = android.os.SystemClock.elapsedRealtimeNanos()
+                if (now - lastDisplayDispatchNanos < 33_000_000L) return@LaunchedEffect
+                lastDisplayDispatchNanos = now
+                webView.evaluateJavascript("setZoomDisplay($zoomFactor);", null)
+            } else {
+                lastDisplayDispatchNanos = 0L
+                webView.evaluateJavascript("setZoom($zoomFactor);", null)
+            }
+        }
+    }
+    LaunchedEffect(webViewRef, isWebViewLoading, scrollToPage, pureKotlinFallback) {
+        if (webViewRef != null && !isWebViewLoading && pureKotlinFallback == null && scrollToPage != null) {
+            webViewRef?.evaluateJavascript("scrollToPage(${scrollToPage + 1});", null)
+            onScrollProgressHandled()
+        }
+    }
+
+    Box(modifier = modifier.fillMaxSize().background(if (isNightMode) Color(0xFF151514) else Color(0xFFfaf9f5))) {
+        if (pureKotlinFallback != null) {
+            val extracted = pureKotlinFallback!!
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Loop 14: labeled recovery/error state — the extracted text must never
+                // masquerade as a successful formatted preview (the old "Clean Document
+                // View" banner looked like a feature, not a failure).
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = .5f),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                        Text(
+                            text = DocxTextRecovery.bannerHeadline(),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        DocxTextRecovery.displayReason(fallbackReason)?.let { reason ->
+                            Text(
+                                text = reason,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = .75f),
+                                maxLines = 2
+                            )
+                        }
+                        DocxTextRecovery
+                            .statsLabel(extracted.wordCount, extracted.paragraphCount)?.let { stats ->
+                                Text(
+                                    text = stats,
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = .75f)
+                                )
+                            }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
+                            // Retry rebuilds the WebView and re-runs the real renderer;
+                            // the source document is never modified.
+                            TextButton(
+                                onClick = { retryDocxRender() },
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+                            ) { Text("Retry formatted view", fontSize = 12.sp) }
+                        }
+                    }
+                }
+                if (extracted.paragraphs.isEmpty()) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("No text content could be recovered from this DOCX file.", color = MaterialTheme.colorScheme.onSurface.copy(alpha = .6f))
+                    }
+                } else {
+                    PlainTextPreview(
+                        content = extracted.paragraphs.joinToString("\n\n"),
+                        isDarkMode = isNightMode,
+                        fontSizeSetting = "Default",
+                        searchQuery = searchQuery,
+                        searchTriggerNext = searchTriggerNext,
+                        searchTriggerPrev = searchTriggerPrev,
+                        onSearchResultCount = onSearchResultCount,
+                        onSingleTap = onSingleTap,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        } else {
+            androidx.compose.runtime.key(base64Docx, docxReloadKey) {
+                AndroidView(
+                    factory = { viewContext ->
+                        // Loop 12 (Bug E): the editor page is now served through the
+                        // WebViewAssetLoader (same mechanism as the PDF reader) so the
+                        // DOCX bytes can be streamed to docx-preview as an ArrayBuffer
+                        // instead of a ~1.33x-larger base64 String crossing the JS bridge
+                        // (which peaked at ~5 simultaneous copies of large documents).
+                        //
+                        // Loop 14 REGRESSION FIX: the editor was previously registered under
+                        // "/editor/" and loaded at /editor/docx_editor.html. WebViewAssetLoader
+                        // hands each handler the path with the registered prefix STRIPPED, so
+                        // AssetsPathHandler tried to open the asset "docx_editor.html" — which
+                        // lives at "editor/docx_editor.html" — and every DOCX open failed the
+                        // main-frame load, silently landing in the plain-text recovery view.
+                        // Registering "/assets/" (the documented pattern, same as the PDF
+                        // reader) makes /assets/editor/docx_editor.html resolve to the real
+                        // asset editor/docx_editor.html. The /docx-src/ stream is unaffected:
+                        // its custom handler receives the stripped suffix "document.docx",
+                        // which is exactly what it matches on.
+                        val docxAssetLoader = androidx.webkit.WebViewAssetLoader.Builder()
+                            .addPathHandler("/assets/", MimeAwareAssetsPathHandler(context))
+                            .addPathHandler("/docx-src/", object : androidx.webkit.WebViewAssetLoader.PathHandler {
+                                override fun handle(path: String): android.webkit.WebResourceResponse? {
+                                    if (path != "document.docx") return null
+                                    val documentFile = File(fileEntity.path)
+                                    if (!documentFile.isFile) return null
+                                    return runCatching {
+                                        android.webkit.WebResourceResponse(
+                                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                            null,
+                                            200,
+                                            "OK",
+                                            mapOf("Content-Length" to documentFile.length().toString()),
+                                            java.io.FileInputStream(documentFile)
+                                        )
+                                    }.getOrNull()
+                                }
+                            })
+                            .build()
+                        android.webkit.WebView(viewContext).apply {
+                            webViewRef = this
+                            latestWebViewCreatedCallback.value(this)
+                            settings.apply {
+                                javaScriptEnabled = true
+                                domStorageEnabled = true
+                                // The asset loader serves both the editor page and the
+                                // document bytes; no raw file scheme access is needed.
+                                allowFileAccess = false
+                                allowContentAccess = false
+                                @Suppress("DEPRECATION")
+                                allowFileAccessFromFileURLs = false
+                                @Suppress("DEPRECATION")
+                                allowUniversalAccessFromFileURLs = false
+                                builtInZoomControls = false
+                                displayZoomControls = false
+                                setSupportZoom(false)
+                                useWideViewPort = true
+                                loadWithOverviewMode = true
+                            }
+                            setBackgroundColor(if (isNightMode) 0xFF151514.toInt() else 0xFFfaf9f5.toInt())
+
+                            val pageChangedCallback = latestPageChangedCallback
+                            addJavascriptInterface(object : Any() {
+                                private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
+                                @android.webkit.JavascriptInterface
+                                fun getDocxBase64(): String = base64Docx
+
+                                @android.webkit.JavascriptInterface
+                                fun onDocumentLoaded(totalPages: Int) {
+                                    mainHandler.post {
+                                        isWebViewLoading = false
+                                        latestDocumentReadyCallback.value()
+                                        pageChangedCallback.value(1, totalPages)
+                                    }
+                                }
+
+                                @android.webkit.JavascriptInterface
+                                fun onPageChanged(currentPage: Int, totalPages: Int) {
+                                    mainHandler.post { pageChangedCallback.value(currentPage, totalPages) }
+                                }
+
+                                @android.webkit.JavascriptInterface
+                                fun onSearchResultCount(count: Int, currentIndex: Int, truncated: Boolean) {
+                                    mainHandler.post { latestSearchResultCallback.value(count, currentIndex, truncated) }
+                                }
+
+                                @android.webkit.JavascriptInterface
+                                fun onDocumentTap() {
+                                    mainHandler.post { latestSingleTapCallback.value() }
+                                }
+
+                                @android.webkit.JavascriptInterface
+                                fun onDocumentDoubleTap() {
+                                    mainHandler.post { latestDoubleTapCallback.value() }
+                                }
+
+                                @android.webkit.JavascriptInterface
+                                fun onZoomChanged(newZoom: Double) {
+                                    mainHandler.post { latestZoomChangedCallback.value(newZoom.toFloat()) }
+                                }
+
+                                @android.webkit.JavascriptInterface
+                                fun onDocumentError(error: String) {
+                                    mainHandler.post {
+                                        isWebViewLoading = false
+                                        android.util.Log.w("WebViewDocx", "Switching to text-only DOCX preview: $error")
+                                        val extracted = runCatching {
+                                            com.example.formats.docx.DocxExtractor.extractText(File(fileEntity.path))
+                                        }.getOrNull()
+                                        // Loop 14: always enter the labeled recovery state (even with
+                                        // zero recovered paragraphs) so a failed render is never left
+                                        // as a silent blank surface or a deceptively normal preview.
+                                        fallbackReason = error.take(180)
+                                        pureKotlinFallback = extracted
+                                        latestRendererFallbackCallback.value(true)
+                                    }
+                                }
+
+                                @android.webkit.JavascriptInterface
+                                fun exitWithoutSaving() {
+                                    mainHandler.post { viewModel.closeCurrentFile() }
+                                }
+                            }, "Android")
+
+                            webViewClient = object : android.webkit.WebViewClient() {
+                                override fun onPageFinished(view: android.webkit.WebView?, url: String?) {
+                                    // Apply the CURRENT zoom factor (not a stale factory-time
+                                    // capture) BEFORE loadDocx so the document never flashes at
+                                    // 100% before settling on the preferred zoom. Loop 12: the
+                                    // bytes are streamed by the page itself (loadDocx(null, ...));
+                                    // the bridge base64 path is only the in-page fallback.
+                                    val freshZoom = latestZoomForPageLoad.value
+                                    val freshNightMode = latestNightModeForPageLoad.value
+                                    view?.evaluateJavascript(
+                                        "setZoom($freshZoom); loadDocx(null, $freshNightMode);",
+                                        null
+                                    )
+                                }
+
+                                override fun shouldOverrideUrlLoading(
+                                    view: android.webkit.WebView?,
+                                    request: android.webkit.WebResourceRequest?
+                                ): Boolean {
+                                    val uri = request?.url ?: return true
+                                    val localEditorAsset = uri.scheme == "https" &&
+                                        uri.host == "appassets.androidplatform.net" &&
+                                        (uri.path?.startsWith("/assets/editor/") == true || uri.path?.startsWith("/docx-src/") == true)
+                                    return !localEditorAsset
+                                }
+
+                                override fun shouldInterceptRequest(
+                                    view: android.webkit.WebView?,
+                                    request: android.webkit.WebResourceRequest?
+                                ): android.webkit.WebResourceResponse? {
+                                    return request?.url?.let { docxAssetLoader.shouldInterceptRequest(it) }
+                                }
+
+                                override fun onReceivedError(
+                                    view: android.webkit.WebView?,
+                                    request: android.webkit.WebResourceRequest?,
+                                    error: android.webkit.WebResourceError?
+                                ) {
+                                    super.onReceivedError(view, request, error)
+                                    if (request?.isForMainFrame == true) {
+                                        android.util.Log.e("WebViewDocx", "Error: ${error?.description}")
+                                        val extracted = runCatching {
+                                            com.example.formats.docx.DocxExtractor.extractText(File(fileEntity.path))
+                                        }.getOrNull()
+                                        // Loop 14: honest recovery state with the failure reason
+                                        // (the Loop 12 /editor/ registration 404 surfaced HERE).
+                                        view?.post {
+                                            fallbackReason = error?.description?.toString()?.take(180)
+                                                ?: "The preview page could not be loaded."
+                                            pureKotlinFallback = extracted
+                                            latestRendererFallbackCallback.value(true)
+                                            isWebViewLoading = false
+                                        }
+                                    }
+                                }
+
+                                // Loop 12 (Bug C/E): a WebView renderer crash must degrade
+                                // to the text-only fallback instead of killing the app or
+                                // leaving a dead blank surface. Returning true tells Android
+                                // this app handled the loss.
+                                override fun onRenderProcessGone(
+                                    view: android.webkit.WebView,
+                                    detail: android.webkit.RenderProcessGoneDetail
+                                ): Boolean {
+                                    android.util.Log.e(
+                                        "WebViewDocx",
+                                        "Renderer process gone (crashed=${detail.didCrash()}); switching to text-only preview"
+                                    )
+                                    view.post {
+                                        val extracted = runCatching {
+                                            com.example.formats.docx.DocxExtractor.extractText(File(fileEntity.path))
+                                        }.getOrNull()
+                                        fallbackReason = "The document renderer stopped unexpectedly."
+                                        pureKotlinFallback = extracted
+                                        latestRendererFallbackCallback.value(true)
+                                        isWebViewLoading = false
+                                    }
+                                    return true
+                                }
+
+                                override fun onReceivedHttpError(
+                                    view: android.webkit.WebView?,
+                                    request: android.webkit.WebResourceRequest?,
+                                    errorResponse: android.webkit.WebResourceResponse?
+                                ) {
+                                    super.onReceivedHttpError(view, request, errorResponse)
+                                    android.util.Log.e("WebViewDocx", "HTTP Error: ${errorResponse?.statusCode}")
+                                }
+                            }
+                            webChromeClient = object : android.webkit.WebChromeClient() {
+                                override fun onConsoleMessage(consoleMessage: android.webkit.ConsoleMessage?): Boolean {
+                                    android.util.Log.d("WebViewDocx", "${consoleMessage?.message()} -- From line ${consoleMessage?.lineNumber()} of ${consoleMessage?.sourceId()}")
+                                    return true
+                                }
+                            }
+                            loadUrl("https://appassets.androidplatform.net/assets/editor/docx_editor.html")
+                        }
+                    },
+                    update = { webView ->
+                        webViewRef = webView
+                        latestWebViewCreatedCallback.value(webView)
+                        webView.setBackgroundColor(if (isNightMode) 0xFF151514.toInt() else 0xFFfaf9f5.toInt())
+                    },
+                    // Loop 12 (Bug E): destroying the WebView when its node leaves
+                    // composition prevents stale instances (and their render processes)
+                    // from retaining the file context after a file switch.
+                    onRelease = { webView ->
+                        webViewRef = null
+                        webView.destroy()
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+
+            if (isWebViewLoading) {
+                Box(
+                    modifier = Modifier.fillMaxSize().background(if (isNightMode) Color(0xFF151514) else Color(0xFFfaf9f5)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    com.example.ui.component.PremiumLoadingIndicator(text = "Rendering Document...")
+                }
+            }
+        }
+    }
+}
