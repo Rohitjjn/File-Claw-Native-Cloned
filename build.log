@@ -1,0 +1,883 @@
+Initialized native services in: /opt/gradle/.gradle/native
+Initialized jansi services in: /opt/gradle/.gradle/native
+Removing 0 daemon stop events from registry
+Previous Daemon (61) stopped at Mon Jun 29 07:09:46 UTC 2026 stop command received
+Previous Daemon (1443) stopped at Mon Jun 29 07:09:46 UTC 2026 stop command received
+Starting a Gradle Daemon, 1 busy and 2 stopped Daemons could not be reused, use --status for details
+Starting process 'Gradle build daemon'. Working directory: /opt/gradle/.gradle/daemon/9.3.1 Command: /usr/lib/jvm/temurin-21-jdk-amd64/bin/java --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.prefs/java.util.prefs=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.prefs/java.util.prefs=ALL-UNNAMED --add-opens=java.base/java.nio.charset=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens=java.xml/javax.xml.namespace=ALL-UNNAMED --add-opens=java.base/java.time=ALL-UNNAMED -Xmx2048m -Dfile.encoding=UTF-8 -Duser.country=US -Duser.language=en -Duser.variant -cp /opt/gradle/gradle-9.3.1/lib/gradle-daemon-main-9.3.1.jar -javaagent:/opt/gradle/gradle-9.3.1/lib/agents/gradle-instrumentation-agent-9.3.1.jar org.gradle.launcher.daemon.bootstrap.GradleDaemon 9.3.1
+Successfully started process 'Gradle build daemon'
+An attempt to start the daemon took 1.591 secs.
+The client will now receive all logging from the daemon (pid: 1770). The daemon log file: /opt/gradle/.gradle/daemon/9.3.1/daemon-1770.out.log
+Starting build in new daemon [memory: 2 GiB]
+Using 4 worker leases.
+Operational build model parameters: {requiresToolingModels=false, parallelProjectExecution=false, configureOnDemand=false, configurationCache=false, configurationCacheParallelStore=false, configurationCacheParallelLoad=true, isolatedProjects=false, parallelProjectConfiguration=false, intermediateModelCache=false, parallelToolingApiActions=false, invalidateCoupledProjects=false, modelAsProjectDependency=false, resilientModelBuilding=false}
+Received JVM installation metadata from '/usr/lib/jvm/temurin-21-jdk-amd64': {JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64, JAVA_VERSION=21.0.11, JAVA_VENDOR=Eclipse Adoptium, RUNTIME_NAME=OpenJDK Runtime Environment, RUNTIME_VERSION=21.0.11+10-LTS, VM_NAME=OpenJDK 64-Bit Server VM, VM_VERSION=21.0.11+10-LTS, VM_VENDOR=Eclipse Adoptium, OS_ARCH=amd64}
+Watching the file system is configured to be enabled if available
+Unable to list file systems to check whether they can be watched. Disabling watching. Reason: Could not query file systems: could not open mount file (errno 2: No such file or directory)
+File system watching is inactive
+Starting Build
+Settings evaluated using settings file '/app/applet/settings.gradle.kts'.
+Projects loaded. Root project using build file '/app/applet/build.gradle.kts'.
+Included projects: [root project 'Files Claw', project ':app']
+
+> Configure project :
+Evaluating root project 'Files Claw' using build file '/app/applet/build.gradle.kts'.
+Resolved plugin [id: 'com.android.application', version: '8.4.2', apply: false]
+Resolved plugin [id: 'org.jetbrains.kotlin.android', version: '1.9.22', apply: false]
+Resolved plugin [id: 'com.google.devtools.ksp', version: '1.9.22-1.0.17', apply: false]
+Resolved plugin [id: 'org.jetbrains.kotlin.plugin.serialization', version: '1.9.22', apply: false]
+
+> Configure project :app
+Evaluating project ':app' using build file '/app/applet/app/build.gradle.kts'.
+Resolved plugin [id: 'com.android.application', version: '8.4.2']
+Resolved plugin [id: 'org.jetbrains.kotlin.android', version: '1.9.22']
+Resolved plugin [id: 'com.google.devtools.ksp', version: '1.9.22-1.0.17']
+Resolved plugin [id: 'org.jetbrains.kotlin.plugin.serialization', version: '1.9.22']
+Using default execution profile
+Using Kotlin Gradle Plugin gradle82 variant
+All projects evaluated.
+Task path ':app:assembleDebug' matched project ':app'
+Task name matched 'assembleDebug'
+Selected primary task 'assembleDebug' from project :app
+Tasks to be executed: [task ':app:preBuild', task ':app:preDebugBuild', task ':app:mergeDebugNativeDebugMetadata', task ':app:checkKotlinGradlePluginConfigurationErrors', task ':app:generateDebugBuildConfig', task ':app:checkDebugAarMetadata', task ':app:generateDebugResValues', task ':app:mapDebugSourceSetPaths', task ':app:generateDebugResources', task ':app:mergeDebugResources', task ':app:packageDebugResources', task ':app:parseDebugLocalResources', task ':app:createDebugCompatibleScreenManifests', task ':app:extractDeepLinksDebug', task ':app:processDebugMainManifest', task ':app:processDebugManifest', task ':app:processDebugManifestForPackage', task ':app:processDebugResources', task ':app:kspDebugKotlin', task ':app:compileDebugKotlin', task ':app:javaPreCompileDebug', task ':app:compileDebugJavaWithJavac', task ':app:mergeDebugShaders', task ':app:compileDebugShaders', task ':app:generateDebugAssets', task ':app:mergeDebugAssets', task ':app:compressDebugAssets', task ':app:desugarDebugFileDependencies', task ':app:dexBuilderDebug', task ':app:mergeDebugGlobalSynthetics', task ':app:processDebugJavaRes', task ':app:mergeDebugJavaResource', task ':app:checkDebugDuplicateClasses', task ':app:mergeDebugStartupProfile', task ':app:mergeExtDexDebug', task ':app:mergeLibDexDebug', task ':app:mergeProjectDexDebug', task ':app:mergeDebugJniLibFolders', task ':app:mergeDebugNativeLibs', task ':app:stripDebugDebugSymbols', task ':app:validateSigningDebug', task ':app:writeDebugAppMetadata', task ':app:writeDebugSigningConfigVersions', task ':app:packageDebug', task ':app:createDebugApkListingFileRedirect', task ':app:assembleDebug']
+Tasks that were excluded: []
+Resolve mutations for :app:preBuild (Thread[#57,Execution worker,5,main]) started.
+:app:preBuild (Thread[#57,Execution worker,5,main]) started.
+
+> Task :app:preBuild UP-TO-DATE
+Skipping task ':app:preBuild' as it has no actions.
+Resolve mutations for :app:preDebugBuild (Thread[#57,Execution worker,5,main]) started.
+:app:preDebugBuild (Thread[#57,Execution worker,5,main]) started.
+
+> Task :app:preDebugBuild UP-TO-DATE
+Skipping task ':app:preDebugBuild' as it has no actions.
+Resolve mutations for :app:mergeDebugNativeDebugMetadata (Thread[#57,Execution worker,5,main]) started.
+:app:mergeDebugNativeDebugMetadata (Thread[#57,Execution worker,5,main]) started.
+
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+Skipping task ':app:mergeDebugNativeDebugMetadata' as it has no source files and no previous output files.
+Resolve mutations for :app:checkKotlinGradlePluginConfigurationErrors (Thread[#57,Execution worker,5,main]) started.
+:app:checkKotlinGradlePluginConfigurationErrors (Thread[#57,Execution worker,5,main]) started.
+
+> Task :app:checkKotlinGradlePluginConfigurationErrors
+Caching disabled for task ':app:checkKotlinGradlePluginConfigurationErrors' because:
+  Build cache is disabled
+Task ':app:checkKotlinGradlePluginConfigurationErrors' is not up-to-date because:
+  Task has not declared any outputs despite executing actions.
+Resolve mutations for :app:generateDebugBuildConfig (Thread[#57,Execution worker,5,main]) started.
+:app:generateDebugBuildConfig (Thread[#57,Execution worker,5,main]) started.
+
+> Task :app:generateDebugBuildConfig UP-TO-DATE
+Caching disabled for task ':app:generateDebugBuildConfig' because:
+  Build cache is disabled
+Skipping task ':app:generateDebugBuildConfig' as it is up-to-date.
+Resolve mutations for :app:checkDebugAarMetadata (Thread[#57,Execution worker,5,main]) started.
+:app:checkDebugAarMetadata (Thread[#57,Execution worker,5,main]) started.
+
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+Caching disabled for task ':app:checkDebugAarMetadata' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':app:checkDebugAarMetadata' as it is up-to-date.
+Resolve mutations for :app:generateDebugResValues (Thread[#57,Execution worker,5,main]) started.
+:app:generateDebugResValues (Thread[#57,Execution worker,5,main]) started.
+
+> Task :app:generateDebugResValues UP-TO-DATE
+Caching disabled for task ':app:generateDebugResValues' because:
+  Build cache is disabled
+Skipping task ':app:generateDebugResValues' as it is up-to-date.
+Resolve mutations for :app:mapDebugSourceSetPaths (Thread[#57,Execution worker,5,main]) started.
+:app:mapDebugSourceSetPaths (Thread[#57,Execution worker,5,main]) started.
+
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+Caching disabled for task ':app:mapDebugSourceSetPaths' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':app:mapDebugSourceSetPaths' as it is up-to-date.
+Resolve mutations for :app:generateDebugResources (Thread[#57,Execution worker,5,main]) started.
+:app:generateDebugResources (Thread[#57,Execution worker,5,main]) started.
+
+> Task :app:generateDebugResources UP-TO-DATE
+Caching disabled for task ':app:generateDebugResources' because:
+  Build cache is disabled
+Skipping task ':app:generateDebugResources' as it is up-to-date.
+Resolve mutations for :app:mergeDebugResources (Thread[#57,Execution worker,5,main]) started.
+:app:mergeDebugResources (Thread[#57,Execution worker,5,main]) started.
+
+> Task :app:mergeDebugResources UP-TO-DATE
+Caching disabled for task ':app:mergeDebugResources' because:
+  Build cache is disabled
+Skipping task ':app:mergeDebugResources' as it is up-to-date.
+Resolve mutations for :app:packageDebugResources (Thread[#57,Execution worker,5,main]) started.
+:app:packageDebugResources (Thread[#57,Execution worker,5,main]) started.
+
+> Task :app:packageDebugResources UP-TO-DATE
+Caching disabled for task ':app:packageDebugResources' because:
+  Build cache is disabled
+Skipping task ':app:packageDebugResources' as it is up-to-date.
+Resolve mutations for :app:parseDebugLocalResources (Thread[#57,Execution worker,5,main]) started.
+:app:parseDebugLocalResources (Thread[#57,Execution worker,5,main]) started.
+
+> Task :app:parseDebugLocalResources UP-TO-DATE
+Caching disabled for task ':app:parseDebugLocalResources' because:
+  Build cache is disabled
+Skipping task ':app:parseDebugLocalResources' as it is up-to-date.
+Resolve mutations for :app:createDebugCompatibleScreenManifests (Thread[#57,Execution worker,5,main]) started.
+:app:createDebugCompatibleScreenManifests (Thread[#57,Execution worker,5,main]) started.
+
+> Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
+Caching disabled for task ':app:createDebugCompatibleScreenManifests' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':app:createDebugCompatibleScreenManifests' as it is up-to-date.
+Resolve mutations for :app:extractDeepLinksDebug (Thread[#57,Execution worker,5,main]) started.
+:app:extractDeepLinksDebug (Thread[#57,Execution worker,5,main]) started.
+
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+Caching disabled for task ':app:extractDeepLinksDebug' because:
+  Build cache is disabled
+Skipping task ':app:extractDeepLinksDebug' as it is up-to-date.
+Resolve mutations for :app:processDebugMainManifest (Thread[#57,Execution worker,5,main]) started.
+:app:processDebugMainManifest (Thread[#57,Execution worker,5,main]) started.
+
+> Task :app:processDebugMainManifest UP-TO-DATE
+Caching disabled for task ':app:processDebugMainManifest' because:
+  Build cache is disabled
+Skipping task ':app:processDebugMainManifest' as it is up-to-date.
+Resolve mutations for :app:processDebugManifest (Thread[#57,Execution worker,5,main]) started.
+:app:processDebugManifest (Thread[#57,Execution worker,5,main]) started.
+
+> Task :app:processDebugManifest UP-TO-DATE
+Caching disabled for task ':app:processDebugManifest' because:
+  Build cache is disabled
+Skipping task ':app:processDebugManifest' as it is up-to-date.
+Resolve mutations for :app:processDebugManifestForPackage (Thread[#57,Execution worker,5,main]) started.
+:app:processDebugManifestForPackage (Thread[#57,Execution worker,5,main]) started.
+
+> Task :app:processDebugManifestForPackage UP-TO-DATE
+Custom actions are attached to task ':app:processDebugManifestForPackage'.
+Caching disabled for task ':app:processDebugManifestForPackage' because:
+  Build cache is disabled
+Skipping task ':app:processDebugManifestForPackage' as it is up-to-date.
+Resolve mutations for :app:processDebugResources (Thread[#57,Execution worker,5,main]) started.
+:app:processDebugResources (Thread[#57,Execution worker,5,main]) started.
+
+> Task :app:processDebugResources UP-TO-DATE
+Caching disabled for task ':app:processDebugResources' because:
+  Build cache is disabled
+Skipping task ':app:processDebugResources' as it is up-to-date.
+Resolve mutations for :app:kspDebugKotlin (Thread[#57,Execution worker,5,main]) started.
+:app:kspDebugKotlin (Thread[#57,Execution worker,5,main]) started.
+
+> Task :app:kspDebugKotlin
+file or directory '/app/applet/app/src/debug/kotlin', not found
+file or directory '/app/applet/app/src/debug/java', not found
+file or directory '/app/applet/app/src/main/kotlin', not found
+file or directory '/app/applet/app/src/debug/kotlin', not found
+file or directory '/app/applet/app/src/debug/java', not found
+file or directory '/app/applet/app/src/main/kotlin', not found
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.navigation/navigation-runtime-ktx/2.7.7/f1cf440384a2105fff55b82689034e07aa4591d9/navigation-runtime-ktx-2.7.7.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.navigation/navigation-common-ktx/2.7.7/879ddfea34073bbd81ebf3205f40a6ffe2215063/navigation-common-ktx-2.7.7.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.navigation/navigation-runtime/2.7.7/532a1233b439759ace615e05e56a255d204465f6/navigation-runtime-2.7.7.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.navigation/navigation-common/2.7.7/8acef6e4766982d5b47c67aa6e28ab588dc28125/navigation-common-2.7.7.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.navigation/navigation-compose/2.7.7/c5c79778764e90a3bf1561de7b856dcdf1439749/navigation-compose-2.7.7.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.compose.material3/material3-android/1.2.0/543f77149e0a393bedb444c4382ba9d49a5750ca/material3-release.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/me.saket.telephoto/zoomable-image-coil/0.7.1/fb56a2352b3a4e1be281cb7915dbb4b8b35fd0b8/zoomable-image-coil-0.7.1.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/io.coil-kt/coil-compose/2.5.0/f8a2b0dd3cd01cb613838b273ca129925bd20642/coil-compose-2.5.0.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/io.coil-kt/coil-compose-base/2.5.0/e44141fcefc980376e05d0925afb2cb7e84022/coil-compose-base-2.5.0.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/me.saket.telephoto/zoomable-image/0.7.1/2ff62ad1926638ced5425ea21df3deb93fc6e3d0/zoomable-image-0.7.1.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/me.saket.telephoto/sub-sampling-image/0.7.1/2a593f5a955a7d7eca4eacc30464fc3c5692e1dc/sub-sampling-image-0.7.1.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.compose.foundation/foundation-layout-android/1.6.2/beeb14adc95f1c18b28d48a86fbcc1d3a27ca9aa/foundation-layout-release.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.compose.material/material-icons-core-android/1.6.2/19ed6e699a56bc36b786aa06dd7c733880a4d9dc/material-icons-core-release.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.compose.material/material-icons-extended-android/1.6.2/7d1547eb120cc2f49d3180a767be0cdb91055448/material-icons-extended-release.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.compose.material/material-ripple-android/1.6.2/473b5e3c9f48ea682879bba251ea0c46af53b366/material-ripple-release.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/me.saket.telephoto/zoomable-android/0.7.1/f937d636961f81b473405557b61aef8e9ca2601b/zoomable-release.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.compose.foundation/foundation-android/1.6.2/6388c7dda2da15f83cc5121c0aecdc9eaaee9a09/foundation-release.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.compose.animation/animation-core-android/1.6.2/d47ea6b32186b8e36736258574addcb3054371ed/animation-core-release.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.compose.animation/animation-android/1.6.2/d7551f1ea44c005ce5488f87c26d8c497aa02c53/animation-release.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.compose.ui/ui-util-android/1.6.2/691582f46f712da2fd868c0a86f433ff59a55b6a/ui-util-release.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.compose.ui/ui-unit-android/1.6.2/8ee935ff191668e332b44bbd7dfcf867d02cf8ba/ui-unit-release.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.compose.ui/ui-text-android/1.6.2/bcdec80495c88272bb6aee6007d57ac4f3556c2d/ui-text-release.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.compose.ui/ui-geometry-android/1.6.2/8cc3aa7b827a7667efd4850f944c2428b047c6f4/ui-geometry-release.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.compose.ui/ui-tooling-data-android/1.6.2/1d91f41abd891290eab26aa4b77d74ec5b52394/ui-tooling-data-release.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.compose.ui/ui-tooling-preview-android/1.6.2/1589d6f051ba04088bee4437720c12c9a98bbee1/ui-tooling-preview-release.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.compose.ui/ui-graphics-android/1.6.2/ba2e114339613b46c9ad9f656f47cc148332f610/ui-graphics-release.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.core/core/1.12.0/5aa3088ed93ba8ebaea2b8a83befdfa829339e7a/core-1.12.0.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.work/work-runtime-ktx/2.9.0/752c288369b54108388e08099d6856fe34b36767/work-runtime-ktx-2.9.0.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.work/work-runtime/2.9.0/f8ad8e562534988dd0aad7ebcab42c807db26dfc/work-runtime-2.9.0.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.lifecycle/lifecycle-livedata-core-ktx/2.7.0/746c75e5d0a819d11e255ad137083a51c746e953/lifecycle-livedata-core-ktx-2.7.0.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.lifecycle/lifecycle-livedata-core/2.7.0/d95c9c0b74a6b9882c416c688f6cf201dc416bed/lifecycle-livedata-core-2.7.0.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.lifecycle/lifecycle-livedata/2.7.0/42ad14e1ee00719636e31a36e8cd50d7ce5c45c6/lifecycle-livedata-2.7.0.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.lifecycle/lifecycle-viewmodel-ktx/2.7.0/421575b66dd75fa2a1bd425f9ab335461dd10721/lifecycle-viewmodel-ktx-2.7.0.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.lifecycle/lifecycle-viewmodel-savedstate/2.7.0/1fa14bde5efb3a96fa4fb8ced995f7fdfe99dfd/lifecycle-viewmodel-savedstate-2.7.0.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.lifecycle/lifecycle-viewmodel/2.7.0/ea64fb2e504d200f2b7f03c76f51edd7e9ef62a9/lifecycle-viewmodel-2.7.0.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/io.coil-kt/coil/2.5.0/b8715dafc4143e853f897187f163dd32f1c8ab89/coil-2.5.0.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/io.coil-kt/coil-base/2.5.0/2781eb09c2cf68c2c0722b76a5b22f70ff1f909c/coil-base-2.5.0.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.lifecycle/lifecycle-runtime/2.7.0/e46d7c73ab6cb3e288f51a0ad96bf372e90ceb31/lifecycle-runtime-2.7.0.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.lifecycle/lifecycle-runtime-ktx/2.7.0/99b5608d5971ae4cb95dea85cd0a2bdb1519b89d/lifecycle-runtime-ktx-2.7.0.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.lifecycle/lifecycle-viewmodel-compose/2.7.0/4b85b0835d9e85593b23862c4c129f31d38ebcd8/lifecycle-viewmodel-compose-2.7.0.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.compose.ui/ui-android/1.6.2/f61605cfbb191569e36521a88846c9bb446667e9/ui-release.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.compose.ui/ui-tooling-android/1.6.2/8c3e5c10476c72708b0e56e0ded504e0fff86950/ui-tooling-release.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.compose.ui/ui-test-manifest/1.6.2/a2c6c6513b41af5ce6d780aa13eb49690e6796ef/ui-test-manifest-1.6.2.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.activity/activity/1.8.2/bce54c84024b17c34f9d4cdeaf1ce39d3e750c9e/activity-1.8.2.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.activity/activity-compose/1.8.2/648fbbfd0bd3b85c4de733dd022fc86741477e43/activity-compose-1.8.2.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.activity/activity-ktx/1.8.2/735d4efd33db4ef032d985415be3e39edbaa65c4/activity-ktx-1.8.2.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.core/core-ktx/1.12.0/1b80a40d6f34eb52c8de87c186feb57aa2a43ada/core-ktx-1.12.0.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.room/room-runtime/2.6.1/3ebcd7683411c298dd8aeee635f452c96eaf319/room-runtime-2.6.1.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.room/room-ktx/2.6.1/1f353808ec8a8b2d0a554d2a3f43f0829982df60/room-ktx-2.6.1.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.compose.runtime/runtime-saveable-android/1.6.2/85d9ec1ce9ebcf5ed996d2a60c1f02f47bad54d4/runtime-saveable-release.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/app.cash.molecule/molecule-runtime-android/1.2.0/2c4b358005dbf7ecb525bbd5394ec61763a83831/molecule-runtime-release.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.compose.runtime/runtime-android/1.6.2/10f8d152e1f1f472015685975302183151fd4d24/runtime-release.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.savedstate/savedstate-ktx/1.2.1/b86d338d91b1c26193a42b1d87be9bb02123fa16/savedstate-ktx-1.2.1.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.savedstate/savedstate/1.2.1/e364fc9dec32aa569d855f85864e50250318a093/savedstate-1.2.1.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.sqlite/sqlite-framework/2.4.0/532d56a4f312d78767534ff1cc2f8084baec6c26/sqlite-framework-2.4.0.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.versionedparcelable/versionedparcelable/1.1.1/18e18071e7715679e0593c570217edeb5ca48b9e/versionedparcelable-1.1.1.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.sqlite/sqlite/2.4.0/cc553e5621c8ad4e233059a724100afa9e2fd1f4/sqlite-2.4.0.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.arch.core/core-runtime/2.2.0/39705982680d78556b679ef9d5400d4f17509b0b/core-runtime-2.2.0.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.annotation/annotation-experimental/1.4.0/c7a2038d831d0cfbfb9a440890b287c2e839ecf/annotation-experimental-1.4.0.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/com.tom-roush/pdfbox-android/2.0.27.0/65a2f2b106b3d4ee37c5044cfc72384138bd60d4/pdfbox-android-2.0.27.0.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/com.github.mhiew/android-pdf-viewer/3.2.0-beta.3/1435b3b5e449983f54c28d7818a98954c9186297/android-pdf-viewer-3.2.0-beta.3.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.startup/startup-runtime/1.1.1/9d4ba67056aff98b69eadc1477c19a1e67cb9470/startup-runtime-1.1.1.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for AarToClassTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/com.github.mhiew/pdfium-android/1.9.2/7c8aeebc280b23c62b39c0eae05f9f322c8c408c/pdfium-android-1.9.2.aar because:
+  Build cache is disabled
+  Caching not enabled.
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/abe0f21cdf29ed2becda665d50ec1b29/transformed/navigation-common-ktx-2.7.7-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /app/applet/app/build/intermediates/compile_and_runtime_not_namespaced_r_class_jar/debug/processDebugResources/R.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/8a4a0f6b30e6b66aac5a11855f1977bb/transformed/navigation-common-2.7.7-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/8980794b59860ecad93fe840d3ee9541/transformed/navigation-runtime-2.7.7-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/2dc865296cd7549561e79ae8596d78b0/transformed/navigation-runtime-ktx-2.7.7-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/b24ece35416b6f96deea06268795ad11/transformed/navigation-compose-2.7.7-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/f9a4376ac9b3e05fa3e5b5b0a416cc73/transformed/material3-release-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/da9f02a81166d6c100c686cece1271f1/transformed/coil-compose-2.5.0-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/93cf6f02bcc626458b0c6a0030401127/transformed/zoomable-image-coil-0.7.1-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/444ad3112f3042c13fddbfd88e7cbf49/transformed/coil-compose-base-2.5.0-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/e30624d53d88646ffc53b2297d983567/transformed/zoomable-image-0.7.1-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/5885429a48269d23f032af87625fcb4f/transformed/sub-sampling-image-0.7.1-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/02cca885e44a0aa7518dbecf0c6babd6/transformed/foundation-layout-release-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/752e492e5f719bbe3a31ee3476814243/transformed/material-icons-core-release-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/2b394b19f9baed3a810bb08a1115f6bf/transformed/material-icons-extended-release-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/37b1068bea47ec1135195ad5ef8e2125/transformed/material-ripple-release-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/f19a1f49dd1871e7e5cae584fa90aa0d/transformed/foundation-release-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/57782e3da5ecadbd4bdbabe451cfb6ad/transformed/zoomable-release-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/a54333439fa424a4e2dba218b0406f78/transformed/animation-core-release-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/24b499e9f1874225884fad234d4f172d/transformed/animation-release-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/565c45ccca0efa78e42c125170f75142/transformed/ui-util-release-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/f15b56f6541ed7d599fbab187033824b/transformed/ui-unit-release-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/1ad6417468ab0326edbb868b80187523/transformed/ui-text-release-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/37cb8d1ee9dd97ba3d8e2173c47dd1d3/transformed/ui-geometry-release-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/4d70f0a24a5c9f2f8c2752442ee517e7/transformed/ui-tooling-data-release-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/63e967ec557ffe6b54ee754b5d66ad2a/transformed/ui-tooling-preview-release-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/fda0830a7ccd45e824084efa1523b338/transformed/ui-graphics-release-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/afc3ed27c7717d51c731f0c3597f63fc/transformed/core-1.12.0-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/83118336b3c89b43d29f72a24646898e/transformed/work-runtime-ktx-2.9.0-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/bda461ea4a3c4803da48f20a6cd81eaa/transformed/work-runtime-2.9.0-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/db07ebc646b46bebeb5fe413208ddb73/transformed/lifecycle-livedata-core-ktx-2.7.0-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/5844980dc8c0728ca0490a9d27c4d10b/transformed/lifecycle-livedata-core-2.7.0-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/f8572ddc0c00f0e302f5da0a57f446e8/transformed/lifecycle-livedata-2.7.0-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.lifecycle/lifecycle-common-java8/2.7.0/2ad14aed781c4a73ed4dbb421966d408a0a06686/lifecycle-common-java8-2.7.0.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/0919f2f3ffa3796f6b2a585783053a00/transformed/lifecycle-viewmodel-ktx-2.7.0-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.lifecycle/lifecycle-common/2.7.0/85334205d65cca70ed0109c3acbd29e22a2d9cb1/lifecycle-common-2.7.0.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/cb031b629e877277c2fbba808940ce37/transformed/lifecycle-viewmodel-savedstate-2.7.0-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/575c2c38990128bc70f78d851c5e3dd9/transformed/lifecycle-viewmodel-2.7.0-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/c38094b9c837d9efb45c004fb958586b/transformed/coil-2.5.0-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/ea57ec24d719339fb8303a04dcd3d1a2/transformed/coil-base-2.5.0-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/580dce2673ea611bda7143dfee7c1367/transformed/lifecycle-runtime-ktx-2.7.0-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/493a19a62ff356621b9a09ba4f851f84/transformed/lifecycle-runtime-2.7.0-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/87e4a1e5cbb285242df311fe514e9cc5/transformed/lifecycle-viewmodel-compose-2.7.0-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/edd36005aa30eb20820ea0403cb76120/transformed/ui-release-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/a52aa71415e0758d6f33eb660ff0c79b/transformed/ui-tooling-release-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/0c69003e2f904add3b84bc756f1bcf5d/transformed/ui-test-manifest-1.6.2-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/d8a9574f632b24d066dcd7d501456c9b/transformed/activity-1.8.2-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/4adb6f11f28f4b0289a30d586c2a412c/transformed/activity-ktx-1.8.2-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/21f023471e144b82955a755773b8fde4/transformed/activity-compose-1.8.2-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/d30e1897994a850ee2717701901d47c2/transformed/core-ktx-1.12.0-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.room/room-common/2.6.1/ff1b9580850a9b7eef56554e356628d225785265/room-common-2.6.1.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/5e9927d917b94ead780f1039934cbea0/transformed/room-runtime-2.6.1-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/b6c136a776d45a4074ae9ee7f3ccbc22/transformed/room-ktx-2.6.1-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlinx/kotlinx-serialization-core-jvm/1.6.3/6b6c17d0312ba7192893adea9d52959941d0119b/kotlinx-serialization-core-jvm-1.6.3.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlinx/kotlinx-serialization-json-jvm/1.6.3/2241746853abf04073e3ab0dcd9e6729d363b313/kotlinx-serialization-json-jvm-1.6.3.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/com.github.doyaaaaaken/kotlin-csv-jvm/1.9.3/1affc27c2c47ac1fa8d1002cfa5be5267ea59009/kotlin-csv-jvm-1.9.3.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/263f46dfd7dc3ffb942386392fb401e5/transformed/runtime-saveable-release-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/bc037c463922ae76778baf0eb9cd9959/transformed/runtime-release-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/9ed7be820f7e51a13c963ea3f7df8771/transformed/molecule-runtime-release-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlinx/kotlinx-coroutines-core-jvm/1.7.3/2b09627576f0989a436a00a4a54b55fa5026fb86/kotlinx-coroutines-core-jvm-1.7.3.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlinx/kotlinx-coroutines-android/1.7.3/38d9cad3a0b03a10453b56577984bdeb48edeed5/kotlinx-coroutines-android-1.7.3.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/com.squareup.okhttp3/okhttp/4.12.0/2f4525d4a200e97e1b87449c2cd9bd2e25b7e8cd/okhttp-4.12.0.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/com.squareup.okio/okio-jvm/3.6.0/5600569133b7bdefe1daf9ec7f4abeb6d13e1786/okio-jvm-3.6.0.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib-jdk8/1.9.10/c7510d64a83411a649c76f2778304ddf71d7437b/kotlin-stdlib-jdk8-1.9.10.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.jetbrains/markdown-jvm/0.7.3/83df25f4bb0a51e979774c02530824af8ec6b03e/markdown-jvm-0.7.3.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/b112a3ad48be319a6387fb93350da320/transformed/savedstate-ktx-1.2.1-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/d52a8dcefe8e138ee325312b8d36d1ca/transformed/savedstate-1.2.1-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/70c0cff55195efc448a22db6f95ef689/transformed/sqlite-framework-2.4.0-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/8bf13e916c02ff5b8451cfd2fc4bc5e3/transformed/sqlite-2.4.0-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/444d6c46847dcb691ae624b4ff40a41e/transformed/versionedparcelable-1.1.1-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/866383b20c86f4715c299c1eab270496/transformed/core-runtime-2.2.0-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.arch.core/core-common/2.2.0/5e1b8b81dfd5f52c56a8d53b18ca759c19a301f3/core-common-2.2.0.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.collection/collection-jvm/1.4.0/e209fb7bd1183032f55a0408121c6251a81acb49/collection-jvm-1.4.0.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.annotation/annotation-jvm/1.7.0/920472d40adcdef5e18708976b3e314f9a636fcd/annotation-jvm-1.7.0.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/665cf8bc42dc152588a29297392a82ad/transformed/annotation-experimental-1.4.0-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib-jdk7/1.9.10/bc5bfc2690338defd5195b05c57562f2194eeb10/kotlin-stdlib-jdk7-1.9.10.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib/2.0.0/b48df2c4aede9586cc931ead433bc02d6fd7879e/kotlin-stdlib-2.0.0.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/24e3980b71f6b2c14c8202dff46edc72/transformed/pdfbox-android-2.0.27.0-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/050295fa6d8d2bfa4dac41ebbb137bd9/transformed/android-pdf-viewer-3.2.0-beta.3-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.dhatim/fastexcel-reader/0.15.3/827038af7d7e78619f06673160453f43b2b19676/fastexcel-reader-0.15.3.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.apache.commons/commons-compress/1.26.1/44331c1130c370e726a2e1a3e6fba6d2558ef04a/commons-compress-1.26.1.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.tukaani/xz/1.9/1ea4bec1a921180164852c65006d928617bd2caf/xz-1.9.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/com.github.junrar/junrar/7.5.5/4b1300aa087b8c4e5e9bbb988e609bbaddfda283/junrar-7.5.5.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.dhatim/fastexcel/0.15.3/3380686eb2f890dc4c6bb684670ad8c4dcb63ae6/fastexcel-0.15.3.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/net.lingala.zip4j/zip4j/2.11.5/4214e396e3891cb19eded3ce5e584cba9032fdc3/zip4j-2.11.5.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.jetbrains/annotations/23.0.0/8cc20c07506ec18e0834947b84a864bfc094484e/annotations-23.0.0.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/com.google.guava/listenablefuture/1.0/c949a840a6acbc5268d088e47b04177bf90b3cad/listenablefuture-1.0.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.bouncycastle/bcpkix-jdk15to18/1.72/32faf4d74dbc333fb3a7a6c80c30417cf888fc7a/bcpkix-jdk15to18-1.72.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/7a0724669633837bfed6757f3381150f/transformed/startup-runtime-1.1.1-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.bouncycastle/bcutil-jdk15to18/1.72/74d1589a616f7655a1922d0a773e958e87cd2ea0/bcutil-jdk15to18-1.72.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.bouncycastle/bcprov-jdk15to18/1.72/1c53885369e89f9798974bf63b55a764c54b5c61/bcprov-jdk15to18-1.72.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/3aa9a90d72f6361ecc791b7dbf8cbd38/transformed/pdfium-android-1.9.2-api.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/commons-codec/commons-codec/1.16.1/47bd4d333fba53406f6c6c51884ddbca435c8862/commons-codec-1.16.1.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/commons-io/commons-io/2.15.1/f11560da189ab563a5c8e351941415430e9304ea/commons-io-2.15.1.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.apache.commons/commons-lang3/3.14.0/1ed471194b02f2c6cb734a0cd6f6f107c673afae/commons-lang3-3.14.0.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/com.fasterxml/aalto-xml/1.3.2/9f2d26b8fc000c13471b95e54f84da00de214319/aalto-xml-1.3.2.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.codehaus.woodstox/stax2-api/4.2/13c2b30926bca0429c704c4b4ca0b5d0432b69cd/stax2-api-4.2.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/gradle/.gradle/caches/modules-2/files-2.1/com.github.rzymek/opczip/1.2.0/122a02534846cf72e5a35a5ab22a2536177fc28a/opczip-1.2.0.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/android/sdk/platforms/android-34/android.jar because:
+  Build cache is disabled
+Caching disabled for ClasspathEntrySnapshotTransform: /opt/android/sdk/build-tools/34.0.0/core-lambda-stubs.jar because:
+  Build cache is disabled
+Caching disabled for task ':app:kspDebugKotlin' because:
+  Build cache is disabled
+Task ':app:kspDebugKotlin' is not up-to-date because:
+  Class path of task ':app:kspDebugKotlin' has changed from 5b346e3f08fe5d0a59b57e22b5892f5e to 0995163183e53657d70d4430f595a63c.
+The input changes require a full rebuild for incremental task ':app:kspDebugKotlin'.
+file or directory '/app/applet/app/src/debug/kotlin', not found
+file or directory '/app/applet/app/src/debug/java', not found
+file or directory '/app/applet/app/src/main/kotlin', not found
+file or directory '/app/applet/app/src/debug/kotlin', not found
+file or directory '/app/applet/app/src/debug/java', not found
+file or directory '/app/applet/app/src/main/kotlin', not found
+file or directory '/app/applet/app/src/debug/kotlin', not found
+file or directory '/app/applet/app/src/debug/java', not found
+file or directory '/app/applet/app/src/main/kotlin', not found
+file or directory '/app/applet/app/src/debug/kotlin', not found
+file or directory '/app/applet/app/src/debug/java', not found
+file or directory '/app/applet/app/src/main/kotlin', not found
+file or directory '/app/applet/app/src/debug/kotlin', not found
+file or directory '/app/applet/app/src/debug/java', not found
+file or directory '/app/applet/app/src/main/kotlin', not found
+Kotlin source files: /app/applet/app/src/main/java/com/example/ui/component/ClaudeComponents.kt, /app/applet/app/src/main/java/com/example/ui/screens/HomeScreen.kt, /app/applet/app/src/main/java/com/example/ui/screens/EditorScreen.kt, /app/applet/app/src/main/java/com/example/ui/screens/SplashScreen.kt, /app/applet/app/src/main/java/com/example/ui/screens/FilePreviewScreen.kt, /app/applet/app/src/main/java/com/example/ui/screens/SearchScreen.kt, /app/applet/app/src/main/java/com/example/ui/screens/AllFilesScreen.kt, /app/applet/app/src/main/java/com/example/ui/screens/FileTreeComponent.kt, /app/applet/app/src/main/java/com/example/ui/screens/SettingsScreen.kt, /app/applet/app/src/main/java/com/example/ui/theme/Color.kt, /app/applet/app/src/main/java/com/example/ui/theme/Type.kt, /app/applet/app/src/main/java/com/example/ui/theme/Theme.kt, /app/applet/app/src/main/java/com/example/utils/CacheManager.kt, /app/applet/app/src/main/java/com/example/utils/SmartCacheWorker.kt, /app/applet/app/src/main/java/com/example/data/AppRepository.kt, /app/applet/app/src/main/java/com/example/data/SettingDao.kt, /app/applet/app/src/main/java/com/example/data/RecentFileDao.kt, /app/applet/app/src/main/java/com/example/data/SettingEntity.kt, /app/applet/app/src/main/java/com/example/data/RecentFileEntity.kt, /app/applet/app/src/main/java/com/example/data/AppDatabase.kt, /app/applet/app/src/main/java/com/example/FileClawApp.kt, /app/applet/app/src/main/java/com/example/services/FileManager.kt, /app/applet/app/src/main/java/com/example/MainActivity.kt, /app/applet/app/src/main/java/com/example/viewmodel/MainViewModel.kt
+Java source files: 
+Script source files: 
+Script file extensions: 
+Caching disabled for StructureTransformAction: /app/applet/app/build/intermediates/compile_and_runtime_not_namespaced_r_class_jar/debug/processDebugResources/R.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/8980794b59860ecad93fe840d3ee9541/transformed/navigation-runtime-2.7.7-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/8a4a0f6b30e6b66aac5a11855f1977bb/transformed/navigation-common-2.7.7-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/abe0f21cdf29ed2becda665d50ec1b29/transformed/navigation-common-ktx-2.7.7-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/2dc865296cd7549561e79ae8596d78b0/transformed/navigation-runtime-ktx-2.7.7-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/b24ece35416b6f96deea06268795ad11/transformed/navigation-compose-2.7.7-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/93cf6f02bcc626458b0c6a0030401127/transformed/zoomable-image-coil-0.7.1-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/f9a4376ac9b3e05fa3e5b5b0a416cc73/transformed/material3-release-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/da9f02a81166d6c100c686cece1271f1/transformed/coil-compose-2.5.0-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/444ad3112f3042c13fddbfd88e7cbf49/transformed/coil-compose-base-2.5.0-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/e30624d53d88646ffc53b2297d983567/transformed/zoomable-image-0.7.1-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/5885429a48269d23f032af87625fcb4f/transformed/sub-sampling-image-0.7.1-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/02cca885e44a0aa7518dbecf0c6babd6/transformed/foundation-layout-release-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/752e492e5f719bbe3a31ee3476814243/transformed/material-icons-core-release-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/2b394b19f9baed3a810bb08a1115f6bf/transformed/material-icons-extended-release-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/37b1068bea47ec1135195ad5ef8e2125/transformed/material-ripple-release-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/57782e3da5ecadbd4bdbabe451cfb6ad/transformed/zoomable-release-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/f19a1f49dd1871e7e5cae584fa90aa0d/transformed/foundation-release-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/a54333439fa424a4e2dba218b0406f78/transformed/animation-core-release-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/24b499e9f1874225884fad234d4f172d/transformed/animation-release-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/565c45ccca0efa78e42c125170f75142/transformed/ui-util-release-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/f15b56f6541ed7d599fbab187033824b/transformed/ui-unit-release-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/1ad6417468ab0326edbb868b80187523/transformed/ui-text-release-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/37cb8d1ee9dd97ba3d8e2173c47dd1d3/transformed/ui-geometry-release-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/4d70f0a24a5c9f2f8c2752442ee517e7/transformed/ui-tooling-data-release-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/63e967ec557ffe6b54ee754b5d66ad2a/transformed/ui-tooling-preview-release-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/fda0830a7ccd45e824084efa1523b338/transformed/ui-graphics-release-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/afc3ed27c7717d51c731f0c3597f63fc/transformed/core-1.12.0-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/83118336b3c89b43d29f72a24646898e/transformed/work-runtime-ktx-2.9.0-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/bda461ea4a3c4803da48f20a6cd81eaa/transformed/work-runtime-2.9.0-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/db07ebc646b46bebeb5fe413208ddb73/transformed/lifecycle-livedata-core-ktx-2.7.0-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/5844980dc8c0728ca0490a9d27c4d10b/transformed/lifecycle-livedata-core-2.7.0-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/f8572ddc0c00f0e302f5da0a57f446e8/transformed/lifecycle-livedata-2.7.0-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.lifecycle/lifecycle-common-java8/2.7.0/2ad14aed781c4a73ed4dbb421966d408a0a06686/lifecycle-common-java8-2.7.0.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/0919f2f3ffa3796f6b2a585783053a00/transformed/lifecycle-viewmodel-ktx-2.7.0-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.lifecycle/lifecycle-common/2.7.0/85334205d65cca70ed0109c3acbd29e22a2d9cb1/lifecycle-common-2.7.0.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/cb031b629e877277c2fbba808940ce37/transformed/lifecycle-viewmodel-savedstate-2.7.0-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/575c2c38990128bc70f78d851c5e3dd9/transformed/lifecycle-viewmodel-2.7.0-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/c38094b9c837d9efb45c004fb958586b/transformed/coil-2.5.0-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/ea57ec24d719339fb8303a04dcd3d1a2/transformed/coil-base-2.5.0-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/493a19a62ff356621b9a09ba4f851f84/transformed/lifecycle-runtime-2.7.0-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/580dce2673ea611bda7143dfee7c1367/transformed/lifecycle-runtime-ktx-2.7.0-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/87e4a1e5cbb285242df311fe514e9cc5/transformed/lifecycle-viewmodel-compose-2.7.0-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/edd36005aa30eb20820ea0403cb76120/transformed/ui-release-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/a52aa71415e0758d6f33eb660ff0c79b/transformed/ui-tooling-release-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/0c69003e2f904add3b84bc756f1bcf5d/transformed/ui-test-manifest-1.6.2-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/d8a9574f632b24d066dcd7d501456c9b/transformed/activity-1.8.2-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/21f023471e144b82955a755773b8fde4/transformed/activity-compose-1.8.2-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/4adb6f11f28f4b0289a30d586c2a412c/transformed/activity-ktx-1.8.2-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/d30e1897994a850ee2717701901d47c2/transformed/core-ktx-1.12.0-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.room/room-common/2.6.1/ff1b9580850a9b7eef56554e356628d225785265/room-common-2.6.1.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/5e9927d917b94ead780f1039934cbea0/transformed/room-runtime-2.6.1-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/b6c136a776d45a4074ae9ee7f3ccbc22/transformed/room-ktx-2.6.1-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlinx/kotlinx-serialization-core-jvm/1.6.3/6b6c17d0312ba7192893adea9d52959941d0119b/kotlinx-serialization-core-jvm-1.6.3.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlinx/kotlinx-serialization-json-jvm/1.6.3/2241746853abf04073e3ab0dcd9e6729d363b313/kotlinx-serialization-json-jvm-1.6.3.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/modules-2/files-2.1/com.github.doyaaaaaken/kotlin-csv-jvm/1.9.3/1affc27c2c47ac1fa8d1002cfa5be5267ea59009/kotlin-csv-jvm-1.9.3.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/263f46dfd7dc3ffb942386392fb401e5/transformed/runtime-saveable-release-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/9ed7be820f7e51a13c963ea3f7df8771/transformed/molecule-runtime-release-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlinx/kotlinx-coroutines-core-jvm/1.7.3/2b09627576f0989a436a00a4a54b55fa5026fb86/kotlinx-coroutines-core-jvm-1.7.3.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/bc037c463922ae76778baf0eb9cd9959/transformed/runtime-release-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlinx/kotlinx-coroutines-android/1.7.3/38d9cad3a0b03a10453b56577984bdeb48edeed5/kotlinx-coroutines-android-1.7.3.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/modules-2/files-2.1/com.squareup.okhttp3/okhttp/4.12.0/2f4525d4a200e97e1b87449c2cd9bd2e25b7e8cd/okhttp-4.12.0.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/modules-2/files-2.1/com.squareup.okio/okio-jvm/3.6.0/5600569133b7bdefe1daf9ec7f4abeb6d13e1786/okio-jvm-3.6.0.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib-jdk8/1.9.10/c7510d64a83411a649c76f2778304ddf71d7437b/kotlin-stdlib-jdk8-1.9.10.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.jetbrains/markdown-jvm/0.7.3/83df25f4bb0a51e979774c02530824af8ec6b03e/markdown-jvm-0.7.3.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/b112a3ad48be319a6387fb93350da320/transformed/savedstate-ktx-1.2.1-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/d52a8dcefe8e138ee325312b8d36d1ca/transformed/savedstate-1.2.1-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/70c0cff55195efc448a22db6f95ef689/transformed/sqlite-framework-2.4.0-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/8bf13e916c02ff5b8451cfd2fc4bc5e3/transformed/sqlite-2.4.0-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/444d6c46847dcb691ae624b4ff40a41e/transformed/versionedparcelable-1.1.1-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/866383b20c86f4715c299c1eab270496/transformed/core-runtime-2.2.0-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.arch.core/core-common/2.2.0/5e1b8b81dfd5f52c56a8d53b18ca759c19a301f3/core-common-2.2.0.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.collection/collection-jvm/1.4.0/e209fb7bd1183032f55a0408121c6251a81acb49/collection-jvm-1.4.0.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/modules-2/files-2.1/androidx.annotation/annotation-jvm/1.7.0/920472d40adcdef5e18708976b3e314f9a636fcd/annotation-jvm-1.7.0.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/665cf8bc42dc152588a29297392a82ad/transformed/annotation-experimental-1.4.0-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib-jdk7/1.9.10/bc5bfc2690338defd5195b05c57562f2194eeb10/kotlin-stdlib-jdk7-1.9.10.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib/2.0.0/b48df2c4aede9586cc931ead433bc02d6fd7879e/kotlin-stdlib-2.0.0.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/24e3980b71f6b2c14c8202dff46edc72/transformed/pdfbox-android-2.0.27.0-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/050295fa6d8d2bfa4dac41ebbb137bd9/transformed/android-pdf-viewer-3.2.0-beta.3-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.dhatim/fastexcel-reader/0.15.3/827038af7d7e78619f06673160453f43b2b19676/fastexcel-reader-0.15.3.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.apache.commons/commons-compress/1.26.1/44331c1130c370e726a2e1a3e6fba6d2558ef04a/commons-compress-1.26.1.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.tukaani/xz/1.9/1ea4bec1a921180164852c65006d928617bd2caf/xz-1.9.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/modules-2/files-2.1/com.github.junrar/junrar/7.5.5/4b1300aa087b8c4e5e9bbb988e609bbaddfda283/junrar-7.5.5.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.dhatim/fastexcel/0.15.3/3380686eb2f890dc4c6bb684670ad8c4dcb63ae6/fastexcel-0.15.3.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/modules-2/files-2.1/net.lingala.zip4j/zip4j/2.11.5/4214e396e3891cb19eded3ce5e584cba9032fdc3/zip4j-2.11.5.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.jetbrains/annotations/23.0.0/8cc20c07506ec18e0834947b84a864bfc094484e/annotations-23.0.0.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/modules-2/files-2.1/com.google.guava/listenablefuture/1.0/c949a840a6acbc5268d088e47b04177bf90b3cad/listenablefuture-1.0.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/7a0724669633837bfed6757f3381150f/transformed/startup-runtime-1.1.1-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.bouncycastle/bcpkix-jdk15to18/1.72/32faf4d74dbc333fb3a7a6c80c30417cf888fc7a/bcpkix-jdk15to18-1.72.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.bouncycastle/bcutil-jdk15to18/1.72/74d1589a616f7655a1922d0a773e958e87cd2ea0/bcutil-jdk15to18-1.72.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.bouncycastle/bcprov-jdk15to18/1.72/1c53885369e89f9798974bf63b55a764c54b5c61/bcprov-jdk15to18-1.72.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/9.3.1/transforms/3aa9a90d72f6361ecc791b7dbf8cbd38/transformed/pdfium-android-1.9.2-api.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/modules-2/files-2.1/commons-codec/commons-codec/1.16.1/47bd4d333fba53406f6c6c51884ddbca435c8862/commons-codec-1.16.1.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/modules-2/files-2.1/commons-io/commons-io/2.15.1/f11560da189ab563a5c8e351941415430e9304ea/commons-io-2.15.1.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.apache.commons/commons-lang3/3.14.0/1ed471194b02f2c6cb734a0cd6f6f107c673afae/commons-lang3-3.14.0.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/modules-2/files-2.1/com.fasterxml/aalto-xml/1.3.2/9f2d26b8fc000c13471b95e54f84da00de214319/aalto-xml-1.3.2.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/modules-2/files-2.1/com.github.rzymek/opczip/1.2.0/122a02534846cf72e5a35a5ab22a2536177fc28a/opczip-1.2.0.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/gradle/.gradle/caches/modules-2/files-2.1/org.codehaus.woodstox/stax2-api/4.2/13c2b30926bca0429c704c4b4ca0b5d0432b69cd/stax2-api-4.2.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/android/sdk/platforms/android-34/android.jar because:
+  Build cache is disabled
+Caching disabled for StructureTransformAction: /opt/android/sdk/build-tools/34.0.0/core-lambda-stubs.jar because:
+  Build cache is disabled
+[KOTLIN] Kotlin compilation 'jdkHome' argument: null
+
+Resolve mutations for :app:javaPreCompileDebug (Thread[#59,Execution worker Thread 3,5,main]) started.
+:app:javaPreCompileDebug (Thread[#59,Execution worker Thread 3,5,main]) started.
+
+> Task :app:javaPreCompileDebug UP-TO-DATE
+Caching disabled for task ':app:javaPreCompileDebug' because:
+  Build cache is disabled
+Skipping task ':app:javaPreCompileDebug' as it is up-to-date.
+Resolve mutations for :app:mergeDebugShaders (Thread[#59,Execution worker Thread 3,5,main]) started.
+:app:mergeDebugShaders (Thread[#59,Execution worker Thread 3,5,main]) started.
+
+> Task :app:mergeDebugShaders UP-TO-DATE
+Caching disabled for task ':app:mergeDebugShaders' because:
+  Build cache is disabled
+  Simple merging task
+Skipping task ':app:mergeDebugShaders' as it is up-to-date.
+Resolve mutations for :app:compileDebugShaders (Thread[#59,Execution worker Thread 3,5,main]) started.
+:app:compileDebugShaders (Thread[#59,Execution worker Thread 3,5,main]) started.
+
+> Task :app:compileDebugShaders NO-SOURCE
+Skipping task ':app:compileDebugShaders' as it has no source files and no previous output files.
+Resolve mutations for :app:generateDebugAssets (Thread[#59,Execution worker Thread 3,5,main]) started.
+:app:generateDebugAssets (Thread[#59,Execution worker Thread 3,5,main]) started.
+
+> Task :app:generateDebugAssets UP-TO-DATE
+Skipping task ':app:generateDebugAssets' as it has no actions.
+Resolve mutations for :app:mergeDebugAssets (Thread[#59,Execution worker Thread 3,5,main]) started.
+:app:mergeDebugAssets (Thread[#59,Execution worker Thread 3,5,main]) started.
+
+> Task :app:mergeDebugAssets UP-TO-DATE
+Caching disabled for task ':app:mergeDebugAssets' because:
+  Build cache is disabled
+  Simple merging task
+Skipping task ':app:mergeDebugAssets' as it is up-to-date.
+Resolve mutations for :app:compressDebugAssets (Thread[#59,Execution worker Thread 3,5,main]) started.
+:app:compressDebugAssets (Thread[#59,Execution worker Thread 3,5,main]) started.
+
+> Task :app:compressDebugAssets UP-TO-DATE
+Caching disabled for task ':app:compressDebugAssets' because:
+  Build cache is disabled
+Skipping task ':app:compressDebugAssets' as it is up-to-date.
+Resolve mutations for :app:desugarDebugFileDependencies (Thread[#59,Execution worker Thread 3,5,main]) started.
+:app:desugarDebugFileDependencies (Thread[#59,Execution worker Thread 3,5,main]) started.
+
+> Task :app:desugarDebugFileDependencies UP-TO-DATE
+Caching disabled for task ':app:desugarDebugFileDependencies' because:
+  Build cache is disabled
+Skipping task ':app:desugarDebugFileDependencies' as it is up-to-date.
+Resolve mutations for :app:checkDebugDuplicateClasses (Thread[#59,Execution worker Thread 3,5,main]) started.
+:app:checkDebugDuplicateClasses (Thread[#59,Execution worker Thread 3,5,main]) started.
+
+> Task :app:checkDebugDuplicateClasses UP-TO-DATE
+Caching disabled for task ':app:checkDebugDuplicateClasses' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':app:checkDebugDuplicateClasses' as it is up-to-date.
+Resolve mutations for :app:mergeDebugStartupProfile (Thread[#59,Execution worker Thread 3,5,main]) started.
+:app:mergeDebugStartupProfile (Thread[#59,Execution worker Thread 3,5,main]) started.
+
+> Task :app:mergeDebugStartupProfile UP-TO-DATE
+Caching disabled for task ':app:mergeDebugStartupProfile' because:
+  Build cache is disabled
+  Simple merging task
+Skipping task ':app:mergeDebugStartupProfile' as it is up-to-date.
+Resolve mutations for :app:mergeExtDexDebug (Thread[#59,Execution worker Thread 3,5,main]) started.
+:app:mergeExtDexDebug (Thread[#59,Execution worker Thread 3,5,main]) started.
+
+> Task :app:kspDebugKotlin
+i: starting the daemon as: /usr/lib/jvm/temurin-21-jdk-amd64/bin/java -cp /opt/gradle/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-compiler-embeddable/1.9.22/9cd4dc7773cf2a99ecd961a88fbbc9a2da3fb5e1/kotlin-compiler-embeddable-1.9.22.jar:/opt/gradle/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib/1.9.22/d6c44cd08d8f3f9bece8101216dbe6553365c6e3/kotlin-stdlib-1.9.22.jar:/opt/gradle/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-script-runtime/1.9.22/f8139a46fc677ec9badc49ae954392f4f5e7e7c7/kotlin-script-runtime-1.9.22.jar:/opt/gradle/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-reflect/1.6.10/1cbe9c92c12a94eea200d23c2bbaedaf3daf5132/kotlin-reflect-1.6.10.jar:/opt/gradle/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-daemon-embeddable/1.9.22/20e2c5df715f3240c765cfc222530e2796542021/kotlin-daemon-embeddable-1.9.22.jar:/opt/gradle/.gradle/caches/modules-2/files-2.1/org.jetbrains.intellij.deps/trove4j/1.0.20200330/3afb14d5f9ceb459d724e907a21145e8ff394f02/trove4j-1.0.20200330.jar:/opt/gradle/.gradle/caches/modules-2/files-2.1/org.jetbrains/annotations/13.0/919f0dfe192fb4e063e7dacadee7f8bb9a2672a9/annotations-13.0.jar -Djava.awt.headless=true -D$java.rmi.server.hostname=127.0.0.1 -Xmx2048m -Dkotlin.environment.keepalive -ea --add-exports java.base/sun.nio.ch=ALL-UNNAMED org.jetbrains.kotlin.daemon.KotlinCompileDaemon --daemon-runFilesPath /root/.kotlin/daemon --daemon-autoshutdownIdleSeconds=7200 --daemon-compilerClasspath /opt/gradle/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-compiler-embeddable/1.9.22/9cd4dc7773cf2a99ecd961a88fbbc9a2da3fb5e1/kotlin-compiler-embeddable-1.9.22.jar:/opt/gradle/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib/1.9.22/d6c44cd08d8f3f9bece8101216dbe6553365c6e3/kotlin-stdlib-1.9.22.jar:/opt/gradle/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-script-runtime/1.9.22/f8139a46fc677ec9badc49ae954392f4f5e7e7c7/kotlin-script-runtime-1.9.22.jar:/opt/gradle/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-reflect/1.6.10/1cbe9c92c12a94eea200d23c2bbaedaf3daf5132/kotlin-reflect-1.6.10.jar:/opt/gradle/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-daemon-embeddable/1.9.22/20e2c5df715f3240c765cfc222530e2796542021/kotlin-daemon-embeddable-1.9.22.jar:/opt/gradle/.gradle/caches/modules-2/files-2.1/org.jetbrains.intellij.deps/trove4j/1.0.20200330/3afb14d5f9ceb459d724e907a21145e8ff394f02/trove4j-1.0.20200330.jar:/opt/gradle/.gradle/caches/modules-2/files-2.1/org.jetbrains/annotations/13.0/919f0dfe192fb4e063e7dacadee7f8bb9a2672a9/annotations-13.0.jar
+i: Received the message signalling that the daemon is ready
+i: new daemon started, trying to find it
+i: found daemon on port 17624 (28 ms old), trying to connect
+i: connected to the daemon
+i: [ksp] loaded provider(s): [androidx.room.RoomKspProcessor$Provider]
+
+> Task :app:mergeExtDexDebug
+Caching disabled for DexingNoClasspathTransform: /opt/gradle/.gradle/caches/9.3.1/transforms/32522d6f7d813f0dba8d836a3decd149/transformed/material-icons-extended-release-runtime.jar because:
+  Build cache is disabled
+Running dexing transform non-incrementally for '/opt/gradle/.gradle/caches/9.3.1/transforms/32522d6f7d813f0dba8d836a3decd149/transformed/material-icons-extended-release-runtime.jar'
+Invalidating in-memory cache of /opt/gradle/.gradle/caches/9.3.1/fileHashes/kotlinDslCompileAvoidanceClasspathHashCache.bin
+Invalidating in-memory cache of /opt/gradle/.gradle/caches/9.3.1/fileHashes/fileHashes.bin
+Invalidating in-memory cache of /opt/gradle/.gradle/caches/9.3.1/fileHashes/resourceHashesCache.bin
+Invalidating in-memory cache of /opt/gradle/.gradle/caches/journal-1/file-access.bin
+Caching disabled for task ':app:mergeExtDexDebug' because:
+  Build cache is disabled
+Task ':app:mergeExtDexDebug' is not up-to-date because:
+  Class path of task ':app:mergeExtDexDebug' has changed from 5b346e3f08fe5d0a59b57e22b5892f5e to 0995163183e53657d70d4430f595a63c.
+The input changes require a full rebuild for incremental task ':app:mergeExtDexDebug'.
+
+Resolve mutations for :app:compileDebugKotlin (Thread[#57,Execution worker,5,main]) started.
+:app:compileDebugKotlin (Thread[#57,Execution worker,5,main]) started.

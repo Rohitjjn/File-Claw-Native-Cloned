@@ -1,0 +1,294 @@
+name: Build and Release Android App
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: 'App Version Name (e.g. 1.3.0, 1.4.0, 2.0.0)'
+        required: true
+        default: '1.3.0'
+        type: string
+      version_code:
+        description: 'App Version Code (integer number, e.g. 3, 4, 10 - leave blank to auto-generate)'
+        required: false
+        default: ''
+        type: string
+      build_type:
+        description: 'Build Type'
+        required: true
+        default: 'release'
+        type: choice
+        options:
+          - release
+          - debug
+      build_bundle:
+        description: 'Build Android App Bundle (.aab) as well?'
+        required: false
+        default: true
+        type: boolean
+      release_title:
+        description: 'Release Title (optional, leave empty for default: Files Claw v<version>)'
+        required: false
+        default: ''
+        type: string
+      release_notes:
+        description: 'Release Notes / Description (optional changelog)'
+        required: false
+        default: ''
+        type: string
+      prerelease:
+        description: 'Mark as Pre-release?'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build & Publish Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      # Ubuntu-latest runners already have Android SDK pre-installed in $ANDROID_HOME (/usr/local/lib/android/sdk).
+      # We configure PATH and accept licenses without using broken third-party setup actions that fail on obsolete 'tools' package.
+      - name: Configure Android SDK
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME"
+          
+          CMDLINE_DIR="$ANDROID_HOME/cmdline-tools/latest/bin"
+          if [ -d "$CMDLINE_DIR" ]; then
+            echo "$CMDLINE_DIR" >> $GITHUB_PATH
+            # Auto-accept all Android SDK licenses
+            yes | "$CMDLINE_DIR/sdkmanager" --licenses 2>/dev/null || true
+          fi
+          
+          if [ -d "$ANDROID_HOME/platform-tools" ]; then
+            echo "$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
+          fi
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      - name: Make Gradle Wrapper Executable
+        run: chmod +x ./gradlew
+
+      - name: Prepare Signing Keystore
+        id: keystore
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.FILECLAW_KEYSTORE_BASE64 || secrets.RELEASE_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.FILECLAW_STORE_PASSWORD || secrets.RELEASE_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.FILECLAW_KEY_ALIAS || secrets.RELEASE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.FILECLAW_KEY_PASSWORD || secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          if [ -n "$RELEASE_KEYSTORE_BASE64" ]; then
+            echo "Using custom release keystore from GitHub Secrets..."
+            KEYSTORE_PATH="$RUNNER_TEMP/release.keystore"
+            echo "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+            echo "FILECLAW_KEYSTORE=$KEYSTORE_PATH" >> $GITHUB_ENV
+            echo "FILECLAW_STORE_PASSWORD=$STORE_PASSWORD" >> $GITHUB_ENV
+            echo "FILECLAW_KEY_ALIAS=$KEY_ALIAS" >> $GITHUB_ENV
+            echo "FILECLAW_KEY_PASSWORD=$KEY_PASSWORD" >> $GITHUB_ENV
+          elif [ -f "debug.keystore.base64" ]; then
+            echo "Decoding repository debug.keystore.base64 for signing..."
+            KEYSTORE_PATH="$RUNNER_TEMP/repo-debug.keystore"
+            base64 -d debug.keystore.base64 > "$KEYSTORE_PATH"
+            echo "FILECLAW_KEYSTORE=$KEYSTORE_PATH" >> $GITHUB_ENV
+            echo "FILECLAW_STORE_PASSWORD=android" >> $GITHUB_ENV
+            echo "FILECLAW_KEY_ALIAS=androiddebugkey" >> $GITHUB_ENV
+            echo "FILECLAW_KEY_PASSWORD=android" >> $GITHUB_ENV
+          elif [ -f "debug.keystore" ]; then
+            echo "Using existing repository debug.keystore..."
+            echo "FILECLAW_KEYSTORE=$GITHUB_WORKSPACE/debug.keystore" >> $GITHUB_ENV
+            echo "FILECLAW_STORE_PASSWORD=android" >> $GITHUB_ENV
+            echo "FILECLAW_KEY_ALIAS=androiddebugkey" >> $GITHUB_ENV
+            echo "FILECLAW_KEY_PASSWORD=android" >> $GITHUB_ENV
+          else
+            echo "Generating fallback CI signing keystore..."
+            KEYSTORE_PATH="$RUNNER_TEMP/ci-release.keystore"
+            keytool -genkey -v -keystore "$KEYSTORE_PATH" \
+              -alias ci_release -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass fileclawpass -keypass fileclawpass \
+              -dname "CN=FileClaw, OU=Android, O=FileClaw, L=CI, ST=Release, C=US"
+            echo "FILECLAW_KEYSTORE=$KEYSTORE_PATH" >> $GITHUB_ENV
+            echo "FILECLAW_STORE_PASSWORD=fileclawpass" >> $GITHUB_ENV
+            echo "FILECLAW_KEY_ALIAS=ci_release" >> $GITHUB_ENV
+            echo "FILECLAW_KEY_PASSWORD=fileclawpass" >> $GITHUB_ENV
+          fi
+
+      - name: Determine Version Name and Code
+        id: version_info
+        run: |
+          VERSION_NAME="${{ inputs.version_name }}"
+          # Clean version name (strip leading 'v' or 'V' if entered by user)
+          VERSION_NAME="${VERSION_NAME#v}"
+          VERSION_NAME="${VERSION_NAME#V}"
+          
+          # If version code is empty, generate from run number + offset
+          INPUT_VERSION_CODE="${{ inputs.version_code }}"
+          if [ -z "$INPUT_VERSION_CODE" ]; then
+            VERSION_CODE=$(( ${{ github.run_number }} + 10 ))
+          else
+            VERSION_CODE="$INPUT_VERSION_CODE"
+          fi
+          
+          echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_ENV
+          echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_ENV
+          echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
+          echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
+          
+          echo "Target Version Name: $VERSION_NAME"
+          echo "Target Version Code: $VERSION_CODE"
+
+      - name: Build APK (${{ inputs.build_type }})
+        env:
+          FILECLAW_KEYSTORE: ${{ env.FILECLAW_KEYSTORE }}
+          FILECLAW_STORE_PASSWORD: ${{ env.FILECLAW_STORE_PASSWORD }}
+          FILECLAW_KEY_ALIAS: ${{ env.FILECLAW_KEY_ALIAS }}
+          FILECLAW_KEY_PASSWORD: ${{ env.FILECLAW_KEY_PASSWORD }}
+        run: |
+          BUILD_TYPE="${{ inputs.build_type }}"
+          if [ "$BUILD_TYPE" = "release" ]; then
+            ./gradlew :app:assembleRelease \
+              -PversionName="${{ env.VERSION_NAME }}" \
+              -PversionCode="${{ env.VERSION_CODE }}" \
+              --stacktrace
+          else
+            ./gradlew :app:assembleDebug \
+              -PversionName="${{ env.VERSION_NAME }}" \
+              -PversionCode="${{ env.VERSION_CODE }}" \
+              --stacktrace
+          fi
+
+      - name: Build Android App Bundle (.aab)
+        if: ${{ inputs.build_bundle && inputs.build_type == 'release' }}
+        env:
+          FILECLAW_KEYSTORE: ${{ env.FILECLAW_KEYSTORE }}
+          FILECLAW_STORE_PASSWORD: ${{ env.FILECLAW_STORE_PASSWORD }}
+          FILECLAW_KEY_ALIAS: ${{ env.FILECLAW_KEY_ALIAS }}
+          FILECLAW_KEY_PASSWORD: ${{ env.FILECLAW_KEY_PASSWORD }}
+        run: |
+          ./gradlew :app:bundleRelease \
+            -PversionName="${{ env.VERSION_NAME }}" \
+            -PversionCode="${{ env.VERSION_CODE }}" \
+            --stacktrace
+
+      - name: Prepare Release Artifacts
+        run: |
+          mkdir -p release-artifacts
+          BUILD_TYPE="${{ inputs.build_type }}"
+          
+          # Locate generated APK
+          if [ "$BUILD_TYPE" = "release" ]; then
+            APK_SRC=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          else
+            APK_SRC=$(find app/build/outputs/apk/debug -name "*.apk" | head -n 1)
+          fi
+          
+          if [ -n "$APK_SRC" ] && [ -f "$APK_SRC" ]; then
+            APK_DEST="release-artifacts/FileClaw-v${{ env.VERSION_NAME }}-${BUILD_TYPE}.apk"
+            cp "$APK_SRC" "$APK_DEST"
+            echo "Copied APK: $APK_DEST"
+          else
+            echo "Error: No APK found!"
+            find app/build/outputs -type f || true
+            exit 1
+          fi
+          
+          # Locate generated AAB if built
+          if [ "${{ inputs.build_bundle }}" = "true" ] && [ "$BUILD_TYPE" = "release" ]; then
+            AAB_SRC=$(find app/build/outputs/bundle/release -name "*.aab" | head -n 1)
+            if [ -n "$AAB_SRC" ] && [ -f "$AAB_SRC" ]; then
+              AAB_DEST="release-artifacts/FileClaw-v${{ env.VERSION_NAME }}.aab"
+              cp "$AAB_SRC" "$AAB_DEST"
+              echo "Copied AAB: $AAB_DEST"
+            fi
+          fi
+          
+          # Generate SHA-256 Checksums
+          cd release-artifacts
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          cd ..
+
+      - name: Upload Artifacts to Workflow Run
+        uses: actions/upload-artifact@v4
+        with:
+          name: fileclaw-v${{ env.VERSION_NAME }}-${{ inputs.build_type }}
+          path: release-artifacts/*
+
+      - name: Generate Release Body
+        id: release_notes
+        run: |
+          TAG_NAME="v${{ env.VERSION_NAME }}"
+          TITLE="${{ inputs.release_title }}"
+          if [ -z "$TITLE" ]; then
+            TITLE="File Claw v${{ env.VERSION_NAME }}"
+          fi
+          
+          CUSTOM_NOTES="${{ inputs.release_notes }}"
+          
+          cat << 'EOF' > release_body.md
+          ### 🦞 File Claw Release v${{ env.VERSION_NAME }}
+          
+          - **Version Name:** `${{ env.VERSION_NAME }}`
+          - **Version Code:** `${{ env.VERSION_CODE }}`
+          - **Build Type:** `${{ inputs.build_type }}`
+          - **Architectures:** Universal (`arm64-v8a`, `armeabi-v7a`, `x86_64`, `x86`)
+          - **Commit:** `${{ github.sha }}`
+          
+          EOF
+          
+          if [ -n "$CUSTOM_NOTES" ]; then
+            echo -e "### What's New\n$CUSTOM_NOTES\n" >> release_body.md
+          fi
+          
+          echo "### Checksums (SHA-256)" >> release_body.md
+          echo '```' >> release_body.md
+          cat release-artifacts/SHA256SUMS.txt >> release_body.md
+          echo '```' >> release_body.md
+          
+          echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
+          echo "RELEASE_TITLE=$TITLE" >> $GITHUB_ENV
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ env.TAG_NAME }}"
+          TITLE="${{ env.RELEASE_TITLE }}"
+          PRERELEASE_FLAG=""
+          if [ "${{ inputs.prerelease }}" = "true" ]; then
+            PRERELEASE_FLAG="--prerelease"
+          fi
+          
+          echo "Publishing release $TAG with title '$TITLE'..."
+          
+          # Use GitHub CLI to create or update release and upload artifacts
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists. Uploading and clobbering updated assets..."
+            gh release upload "$TAG" release-artifacts/* --clobber
+            gh release edit "$TAG" --title "$TITLE" --notes-file release_body.md $PRERELEASE_FLAG
+          else
+            echo "Creating new release $TAG..."
+            gh release create "$TAG" release-artifacts/* \
+              --title "$TITLE" \
+              --notes-file release_body.md \
+              $PRERELEASE_FLAG
+          fi
+          echo "Release successfully published!"

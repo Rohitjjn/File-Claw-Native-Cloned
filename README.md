@@ -1,34 +1,25 @@
-# File Claw Native
+> **v1.1.0 "Foundation & Safety"**: see [`docs/CHANGELOG.md`](docs/CHANGELOG.md), [`BUILD_GUIDE.md`](BUILD_GUIDE.md) and
+> [`docs/TODO.md`](docs/TODO.md) (KNOWN ISSUES). Docs now live in [`docs/`](docs/); the pre-1.1.0 documents are in `docs/legacy/`
+> and are partly out of date. The Android layer of this release has not been compiled by its author: run the Quality Gate first.
 
-Native Android file browser, previewer and editor built with Kotlin, Jetpack Compose and Room.
-The source archive has been extracted into this repository; open the repository root in Android Studio.
-No Gemini API key or signing configuration edits are required for a debug build.
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
+</div>
 
-## Status
+# Run and deploy your AI Studio app
 
-**Architecture migration: preparation only; blocked at the build baseline.** Production code is unchanged.
-The current application still has mixed-responsibility screens and services; the target format-oriented
-architecture is a plan, not a delivered implementation. No new format support has been added.
+This contains everything you need to run your app locally.
 
-Namespace: `com.example`. Application ID: `com.aistudio.filesclaw.apxqzy`.
-Minimum SDK 26; compile/target SDK 34; Java 17; Kotlin 1.9.22.
+View your app in AI Studio: https://ai.studio/apps/d2f6e347-874b-4724-bf45-f52325ff5de8
 
-## Build and verification
+## Run Locally
 
-See [BUILD_GUIDE.md](BUILD_GUIDE.md). The preparation environment had no Java/Kotlin toolchain
-or Android SDK, so neither Android compilation nor tests could run. Historical test claims are
-not results for this checkout.
+**Prerequisites:**  [Android Studio](https://developer.android.com/studio)
 
-## Developer entry points
 
-- [Current architecture and migration plan](docs/ARCHITECTURE.md)
-- [Production file inventory and proposed destinations](docs/FILE_MIGRATION_MAP.md)
-- [Format ownership map](docs/FORMAT_PACKAGE_MAP.md)
-- [Single-format development guide](docs/FORMAT_DEVELOPMENT_GUIDE.md)
-- [Test plan and observed baseline](docs/TEST_PLAN.md)
-- [Preparation changelog](docs/CHANGELOG.md)
-- [Existing known issues](known-issues.md)
-
-The original root specifications and `docs/legacy/` are historical context, not current build or
-support guarantees. The source registry is `core/format/FormatRegistry.kt`; its support labels
-are coarse and do not imply editing, saving or complete rendering fidelity.
+1. Open Android Studio
+2. Select **Open** and choose the directory containing this project
+3. Allow Android Studio to fix any incompatibilities as it imports the project.
+4. Create a file named `.env` in the project directory and set `GEMINI_API_KEY` in that file to your Gemini API key (see `.env.example` for an example)
+5. Remove this line from the app's `build.gradle.kts` file: `signingConfig = signingConfigs.getByName("debugConfig")`
+6. Run the app on an emulator or physical device

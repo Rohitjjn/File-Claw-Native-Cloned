@@ -1,71 +1,63 @@
-# Architecture
+# File Claw: Architecture (v1.1.0)
 
-## Current state — not yet migrated
-
-One Android application module, namespace `com.example`. The inventory covers 66 production Kotlin files.
-A full method-level audit remains necessary before refactoring. No application classes or resources
-were changed at the preparation checkpoint.
-
-Current opening flow:
-
-1. `MainActivity` handles Android entry points and navigation.
-2. `MainViewModel` handles intake, URI copies, recents, preferences, loading and saving.
-3. `FormatDetector` obtains a `Detection` backed by `FormatRegistry` metadata.
-4. The ViewModel switches on `FileKind`, invokes `FileManager` or parsers, and creates `FileContentState`.
-5. `FilePreviewScreen` switches on state and owns many format composables and WebView bridges.
-6. `UniversalViewers` implements SQLite, fonts, 3D, SVG and generated HTML views.
-7. `FilePrintHelper` combines platform print adapters with format-specific preparation.
-
-`FormatRegistry` currently registers metadata, **not document handlers**. There is no common
-open/close handler contract yet. `FileContentState` is still in the ViewModel source.
-
-Shared foundations include `AtomicFileWriter`, `TextIO`, `ArchiveSafety`, `PathGuard`,
-Room DAOs/repository, cache helpers, and search utilities. Keep their safety guarantees intact.
-PDF.js, DOCX/editor scripts, spreadsheet assets, fonts and licenses remain at existing asset URLs.
-
-## Planned ownership and dependency direction
+## Principle
+Everything that can be decided without the Android framework lives in **`com.example.core`**: pure Kotlin,
+no `android.*` imports, unit-tested on the plain JVM. The Android layers are thin adapters around it.
 
 ```
-com.example/
-  app/                composition root, navigation, lifecycle coordination
-  core/               contracts, detection, I/O, security, cache, shared search
-  data/               persistence, storage and repositories
-  domain/             preview/edit/search use cases
-  feature/            browser, home, preview chrome, editor, settings, file info
-  formats/<family>/   existing parser, renderer, search/edit/save/print preparation
-  ui/                 design tokens, reusable components, adaptive behavior
-  platform/           Android permissions, URI/document, print/share adapters
+┌──────────────────────────────────────────────────────────────────────────┐
+│ ui/            Compose screens + viewers (Home, AllFiles, Search, Settings,│
+│                FilePreview, Editor, UniversalViewers, theme/Glass.kt)       │
+├──────────────────────────────────────────────────────────────────────────┤
+│ viewmodel/     MainViewModel: routing (FormatDetector -> FileContentState),│
+│                saves, recents, search index, intent import                  │
+├───────────────────────────────┬──────────────────────────────────────────┤
+│ services/                     │ data/ + utils/                            │
+│  FileManager (facade)         │  Room (recent_files, settings), repository │
+│  SqliteBrowser                │  CacheManager, SmartCacheWorker            │
+├───────────────────────────────┴──────────────────────────────────────────┤
+│ core/   (pure Kotlin; historical 98% coverage, not rerun for Loop 6)       │
+│  format/   FormatRegistry · FormatDetector · MagicSniffer · TextHeuristics │
+│  io/       TextLoader · TextEncoding · TextSaver · TextWindowReader ·      │
+│            AtomicFileWriter                                                │
+│  archive/  ArchiveLimits · ArchivePaths · LimitedInputStream ·             │
+│            ArchiveTreeBuilder                                              │
+│  csv/      DelimitedParser · DelimitedWriter                               │
+│  security/ PathGuard                                                       │
+│  text/     RtfExtractor · OdfTextExtractor · EpubReader · HtmlSanitizer    │
+│  model3d/  MeshParser (STL, OBJ)                                           │
+│  sqlite/   SqlIdentifier                                                   │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
-These are **proposed** packages; do not create empty implementations. See the migration map for
-actual current paths. Keep the application ID and manifest entry point identities unchanged.
-Keep Room schema identity unchanged unless a separately tested migration requires otherwise.
+## Opening a file (the universal opener pipeline)
+1. **Intake.** A file arrives from the picker, the tree, search, recents, a shortcut, or another app
+   (`ACTION_VIEW`). External `content://` URIs are copied once into `filesDir/imported/` under a sanitised,
+   non-colliding name (`PathGuard`). Handled in `onCreate` / `onNewIntent`, never in a Compose effect.
+2. **Detect** (`FormatDetector.detect`). Reads at most 8 KB. Order: strong binary signature (always wins) →
+   meaningful extension (checked against content) → weak text signature (only if the extension says
+   nothing) → text/binary heuristics. ZIP containers are refined by entry names (docx/xlsx/pptx/odf/epub/apk).
+   Result carries `FormatSpec`, `Confidence`, and `mismatch` (extension disagrees with content).
+3. **Route** (`MainViewModel.buildContentState`): `FileKind` → a `FileContentState` the preview screen renders.
+4. **Render.** Compose viewers, or sandboxed WebViews for PDF (bundled PDF.js via `WebViewAssetLoader`), DOCX / PPTX / spreadsheet grid, Markdown, and HTML. TXT/Markdown previews use bounded HTML windows; truncated TXT/Markdown search streams the original file and opens bounded excerpts at stored match offsets.
+5. **Save** (editable states only): `AtomicFileWriter` (temp file + fsync + atomic rename); charset and BOM are
+   preserved; truncated or converted views are read-only and the ViewModel refuses to save them.
 
-Composition root wires format implementations into the existing registry. Core/domain depend
-on contracts, not renderers. Formats consume shared services; they must not depend on application
-ViewModels or unrelated formats. Shared OLE2 handling remains reusable for DOC and XLS. CSV/TSV
-share delimited parsing; XLSX variants share a workbook engine; XLS is a separate engine.
+## Data model
+`FileContentState` (sealed) is the single contract between routing and rendering. Text and sheets carry
+`truncated` / `readOnlyReason` **as flags, never as text inside the content**.
 
-## Contract design checkpoint (not implemented)
+## Safety boundaries
+| Boundary | Mechanism |
+|---|---|
+| Huge files | 8 KB sniff, 250k-char preview cap with `truncated` flag, `TextWindowReader` for bounded search excerpts, streamed full-file TXT/Markdown search with at most 10k retained offsets, 50k-row grid cap |
+| Archives | entry cap, per-entry size and ratio limits, depth cap, `copyLimited`, zip-slip flagging, cache-chosen output names |
+| Writes | atomic replace everywhere (text, delimited, ZIP entry update) |
+| WebViews | no INTERNET permission; HTML scripts off by default and no bridge; Markdown sanitized with a narrow copy/search bridge; PDF.js and DOCX use trusted local bridges; DOCX cross-file/content access off; external top-level navigation blocked |
+| Database | SQLite opened read-only, identifiers quoted, only generated SELECTs |
+| Persistence | Room fails fast on schema change without a migration (no silent wipe); backup disabled |
 
-Refine existing Detection/FormatSpec/FileContentState rather than adding a competing registry.
-A handler should accept source metadata and a cancellable opening context; return a session with
-preview state, errors, capabilities and read-only reasons; and close owned resources idempotently.
-Optional search/edit/save/print/export operations must be capability-gated. Metadata support labels
-are not capabilities. Cancellation must propagate; resource closure belongs to the session/lifecycle,
-not an unbounded global cache. Android preview composition belongs outside pure Kotlin contracts.
-
-Before selecting signatures, audit all state consumers and ownership of file descriptors, WebViews,
-media players and archive streams. Add routing and session cleanup tests before integrating handlers.
-
-## Safe extraction order
-
-1. Establish a green baseline and complete the implementation audit.
-2. Move pure format helpers and their tests one family at a time.
-3. Extract UniversalViewers and mixed document support helpers.
-4. Introduce handlers via the existing registry, then delegate loading from the ViewModel.
-5. Extract preview composables/bridges, save/search/print responsibilities incrementally.
-6. Reduce activity/navigation responsibilities and audit remaining feature packages.
-7. Run full regression/device gates and only then mark migration complete.
-
-Every step requires compilation, relevant tests and UI/state verification before proceeding.
+## Known structural debt (see TODO.md)
+`FilePreviewScreen.kt` is now roughly 4,100 lines after the Loop 6 readers; navigation is route-without-arguments backed by one shared
+ViewModel state; imported copies don't write back to the source URI; DOCX/WebView renderers pass whole documents
+to JS as base64 (size-capped, not streamed).
