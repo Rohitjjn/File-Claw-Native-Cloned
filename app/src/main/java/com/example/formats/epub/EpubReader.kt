@@ -1,6 +1,7 @@
 package com.example.formats.epub
 
 import java.io.File
+import com.example.core.security.HtmlSanitizer
 import java.util.zip.ZipFile
 import javax.xml.parsers.SAXParserFactory
 import org.xml.sax.Attributes

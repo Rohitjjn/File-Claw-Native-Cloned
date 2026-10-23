@@ -43,6 +43,8 @@ import com.example.ui.component.ClaudeCard
 import com.example.ui.component.FileIcon
 import com.example.ui.component.premiumLoadingPulse
 import com.example.viewmodel.MainViewModel
+import com.example.feature.browser.FileTreeComponent
+import com.example.ui.component.formatFileSize
 import kotlinx.coroutines.launch
 import java.util.Calendar
 

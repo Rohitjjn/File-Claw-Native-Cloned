@@ -28,6 +28,9 @@ import androidx.compose.ui.unit.sp
 import com.example.core.format.FormatRegistry
 import com.example.data.RecentFileEntity
 import com.example.ui.theme.glass
+import com.example.ui.component.FileIcon
+import com.example.ui.component.FileExtensionBadge
+import com.example.ui.component.formatFileSize
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
