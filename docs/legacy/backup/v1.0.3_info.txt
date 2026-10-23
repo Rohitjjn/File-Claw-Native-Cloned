@@ -1,0 +1,12 @@
+Files Claw Backup - Version 1.0.3
+Date: June 18, 2026
+Author: AI Coding Agent
+
+--- SYSTEM COMPLETED STATE ---
+Planning instant WebView document renderer for Markdown, PDF, and DOCX files. Overhauling previous unstable PDF and DOCX loaders with unified high-fidelity WebView clients that overlay Compose circular indicators to prevent 2-sec black flashes or blank screens.
+
+--- ACTIONS IN QUEUE ---
+1. Fetch and bundle mammoth.browser.js, pdf.js, and pdf.worker.js into Android Assets.
+2. Build an elegant, unified DocumentViewerScreen/WebViewPreview inside FilePreviewScreen.kt that handles PDF, DOCX, and MD.
+3. Clean up legacy PDF/DOCX renderers, ensuring no Out-Of-Memory or slow layouts.
+4. Implement a loading overlay logic tied to the WebView's `onPageFinished` event to show a professional circular animator and entirely eliminate the black flashes.

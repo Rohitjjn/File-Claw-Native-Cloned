@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <title>File Claw Word Document Viewer</title>
+    <script src="jszip.min.js"></script>
+    <script src="docx-preview.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #faf9f5;
+            --text-primary: #141413;
+            --border: #e6dfd8;
+        }
+        body.dark {
+            --bg-color: #151514;
+            --text-primary: #f5f5f3;
+            --border: #2d2b28;
+        }
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            -webkit-text-size-adjust: 100%;
+        }
+
+        /* Single Unified Scroll Container */
+        #document-scroller {
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            -webkit-overflow-scrolling: touch;
+            box-sizing: border-box;
+            padding: 12px 8px 32px 8px;
+            overscroll-behavior: contain;
+        }
+
+        #output {
+            position: relative;
+            margin: 0 auto;
+            width: max-content;
+            min-width: 100%;
+            transform-origin: 0 0;
+            transition: none;
+        }
+
+        .docx-wrapper {
+            background: transparent !important;
+            padding: 0 !important;
+        }
+        .docx, section.docx {
+            margin: 0 auto 20px auto !important;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08) !important;
+            border-radius: 8px !important;
+            box-sizing: border-box !important;
+            background-color: #ffffff !important;
+            color: #141413 !important;
+        }
+
+        /* Dark Mode for DOCX Content */
+        body.dark .docx,
+        body.dark section.docx,
+        body.dark .docx-wrapper > section {
+            background-color: #1e1e1e !important;
+            color: #e2e2e6 !important;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.65) !important;
+            border: 1px solid #333336 !important;
+        }
+        body.dark .docx *:not(mark.docx-highlight) {
+            color: #e2e2e6 !important;
+            border-color: #383838 !important;
+        }
+        body.dark .docx div,
+        body.dark .docx p,
+        body.dark .docx span {
+            background-color: transparent !important;
+        }
+        body.dark .docx table,
+        body.dark .docx td,
+        body.dark .docx th {
+            background-color: transparent !important;
+            border-color: #444448 !important;
+            color: #e2e2e6 !important;
+        }
+        body.dark .docx a {
+            color: #88c0d0 !important;
+        }
+
+        /* Search Highlights */
+        mark.docx-highlight {
+            background-color: #ffe082 !important;
+            color: #000000 !important;
+            border-radius: 3px;
+            padding: 1px 3px;
+            box-shadow: 0 0 2px rgba(0,0,0,0.3);
+        }
+        mark.docx-highlight-active {
+            background-color: #ff9800 !important;
+            color: #ffffff !important;
+            outline: 2px solid #e65100;
+        }
+
+        /* Page-shaped skeleton */
+        .docx-skeleton {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 16px;
+            box-sizing: border-box;
+        }
+        .docx-skeleton-page {
+            background: #ffffff;
+            border: 1px solid rgba(25, 25, 25, .08);
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            padding: 26px 22px;
+            margin-bottom: 24px;
+            box-sizing: border-box;
+        }
+        body.dark .docx-skeleton-page {
+            background: #1e1e1e;
+            border-color: #333336;
+        }
+        .docx-skeleton-bar {
+            height: 10px;
+            border-radius: 5px;
+            background: rgba(25, 25, 25, .10);
+            margin-bottom: 12px;
+            animation: docx-skeleton-pulse 1.3s ease-in-out infinite;
+        }
+        body.dark .docx-skeleton-bar { background: rgba(255, 255, 255, .12); }
+        .docx-skeleton-bar.short { width: 42%; }
+        .docx-skeleton-bar.mid { width: 68%; }
+        .docx-skeleton-bar.wide { width: 100%; }
+        @keyframes docx-skeleton-pulse {
+            0%, 100% { opacity: .45; }
+            50% { opacity: .95; }
+        }
+
+        .error-banner {
+            padding: 20px;
+            margin: 16px;
+            background: rgba(220, 53, 69, 0.1);
+            border: 1px solid rgba(220, 53, 69, 0.3);
+            border-radius: 8px;
+            color: #d32f2f;
+            font-size: 14px;
+        }
+
+        /* Dedicated Print Stylesheet */
+        @media print {
+            html, body {
+                overflow: visible !important;
+                height: auto !important;
+                background: #ffffff !important;
+                color: #000000 !important;
+            }
+            #document-scroller {
+                overflow: visible !important;
+                height: auto !important;
+                padding: 0 !important;
+            }
+            #output {
+                zoom: 1 !important;
+                transform: none !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                margin: 0 !important;
+            }
+            .docx, section.docx {
+                box-shadow: none !important;
+                border: none !important;
+                border-radius: 0 !important;
+                margin: 0 auto !important;
+                page-break-after: always;
+                break-after: page;
+            }
+            .docx:last-child, section.docx:last-child {
+                page-break-after: auto;
+                break-after: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="document-scroller">
+        <div id="output">
+            <div id="loading" class="docx-skeleton" role="status" aria-label="Rendering Word document">
+                <div class="docx-skeleton-page">
+                    <div class="docx-skeleton-bar short"></div>
+                    <div class="docx-skeleton-bar wide"></div>
+                    <div class="docx-skeleton-bar wide"></div>
+                    <div class="docx-skeleton-bar mid"></div>
+                </div>
+                <div class="docx-skeleton-page">
+                    <div class="docx-skeleton-bar mid"></div>
+                    <div class="docx-skeleton-bar wide"></div>
+                    <div class="docx-skeleton-bar short"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const isPrintMode = new URLSearchParams(window.location.search).has('print');
+        const scroller = document.getElementById("document-scroller");
+        const container = document.getElementById("output");
+
+        let currentZoom = 1.0; // 1.0 = 100% (Fit Width)
+        let baseScale = 1.0;   // Viewport fit-to-width ratio
+        let measuredPageWidth = 800;
+        let pageObserver = null;
+
+        // ---------------------------------------------------------------------------
+        // Fit-to-Width & Zoom Layout Engine
+        // ---------------------------------------------------------------------------
+        function calculateBaseScale() {
+            if (isPrintMode) return 1.0;
+            const availableWidth = Math.max(280, (window.innerWidth || 360) - 24);
+            const scale = availableWidth / Math.max(200, measuredPageWidth);
+            // Cap baseline scale to reasonable range
+            return Math.min(Math.max(scale, 0.25), 2.5);
+        }
+
+        function getEffectiveZoom() {
+            return isPrintMode ? 1.0 : (baseScale * currentZoom);
+        }
+
+        function applyCommittedZoom(factor, focalX, focalY) {
+            const clamped = Math.min(Math.max(Number(factor) || 1.0, 0.5), 5.0);
+            const oldEffectiveZoom = getEffectiveZoom();
+            currentZoom = clamped;
+            const newEffectiveZoom = getEffectiveZoom();
+
+            // Focal-point anchoring: calculate content position under focal point
+            const fx = (focalX !== undefined && focalX !== null) ? focalX : (window.innerWidth / 2);
+            const fy = (focalY !== undefined && focalY !== null) ? focalY : (window.innerHeight / 2);
+
+            const contentX = (fx + scroller.scrollLeft) / oldEffectiveZoom;
+            const contentY = (fy + scroller.scrollTop) / oldEffectiveZoom;
+
+            container.style.transform = "";
+            container.style.transformOrigin = "";
+            container.style.zoom = String(newEffectiveZoom);
+
+            requestAnimationFrame(() => {
+                const newScrollLeft = contentX * newEffectiveZoom - fx;
+                const newScrollTop = contentY * newEffectiveZoom - fy;
+                scroller.scrollLeft = Math.max(0, newScrollLeft);
+                scroller.scrollTop = Math.max(0, newScrollTop);
+            });
+
+            if (window.Android && window.Android.onZoomChanged) {
+                window.Android.onZoomChanged(currentZoom);
+            }
+        }
+
+        function setZoom(factor) {
+            applyCommittedZoom(factor, window.innerWidth / 2, window.innerHeight / 2);
+        }
+
+        function setZoomDisplay(factor) {
+            if (isPrintMode) return;
+            const clamped = Math.min(Math.max(Number(factor) || 1.0, 0.5), 5.0);
+            const previewRatio = clamped / currentZoom;
+            container.style.transformOrigin = `${scroller.scrollLeft + window.innerWidth / 2}px ${scroller.scrollTop + window.innerHeight / 2}px`;
+            container.style.transform = `scale(${previewRatio})`;
+        }
+
+        // On window resize / orientation change: update baseScale and preserve visible page
+        window.addEventListener('resize', function () {
+            if (isPrintMode || !container) return;
+            const pages = Array.from(container.querySelectorAll('.docx'));
+            let anchorPage = null;
+            let anchorOffset = 0;
+            for (const page of pages) {
+                const rect = page.getBoundingClientRect();
+                if (rect.bottom > 10) {
+                    anchorPage = page;
+                    anchorOffset = rect.top;
+                    break;
+                }
+            }
+
+            baseScale = calculateBaseScale();
+            container.style.zoom = String(getEffectiveZoom());
+
+            requestAnimationFrame(() => {
+                if (anchorPage && anchorPage.isConnected) {
+                    const currentTop = anchorPage.getBoundingClientRect().top;
+                    const delta = currentTop - anchorOffset;
+                    if (Math.abs(delta) > 1) scroller.scrollTop += delta;
+                }
+            });
+        });
+
+        // ---------------------------------------------------------------------------
+        // Focal-Point Anchored Touch Gestures (Pinch-to-zoom & Double-tap)
+        // ---------------------------------------------------------------------------
+        let isPinching = false;
+        let initialPinchDist = 0;
+        let initialZoomOnTouch = 1.0;
+        let pinchFocalX = 0;
+        let pinchFocalY = 0;
+        let lastTapTime = 0;
+        let singleTapTimer = null;
+        let lastTapPosition = { x: 0, y: 0 };
+
+        scroller.addEventListener('touchstart', function (e) {
+            if (isPrintMode) return;
+            if (e.touches.length === 2) {
+                isPinching = true;
+                if (singleTapTimer) { clearTimeout(singleTapTimer); singleTapTimer = null; }
+                const t1 = e.touches[0];
+                const t2 = e.touches[1];
+                initialPinchDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+                initialZoomOnTouch = currentZoom;
+                pinchFocalX = (t1.clientX + t2.clientX) / 2;
+                pinchFocalY = (t1.clientY + t2.clientY) / 2;
+            }
+        }, { passive: true });
+
+        scroller.addEventListener('touchmove', function (e) {
+            if (isPrintMode) return;
+            if (isPinching && e.touches.length === 2) {
+                const t1 = e.touches[0];
+                const t2 = e.touches[1];
+                const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+                if (initialPinchDist > 5) {
+                    const factor = dist / initialPinchDist;
+                    const previewZoom = Math.min(Math.max(initialZoomOnTouch * factor, 0.5), 5.0);
+                    const scale = previewZoom / currentZoom;
+                    container.style.transformOrigin = `${pinchFocalX + scroller.scrollLeft}px ${pinchFocalY + scroller.scrollTop}px`;
+                    container.style.transform = `scale(${scale})`;
+                }
+            }
+        }, { passive: true });
+
+        scroller.addEventListener('touchend', function (e) {
+            if (isPrintMode) return;
+            if (isPinching && e.touches.length < 2) {
+                isPinching = false;
+                const transform = container.style.transform;
+                container.style.transform = "";
+                container.style.transformOrigin = "";
+                const match = transform.match(/scale\(([^)]+)\)/);
+                if (match) {
+                    const previewRatio = parseFloat(match[1]);
+                    if (Number.isFinite(previewRatio) && previewRatio > 0.05) {
+                        const targetZoom = Math.min(Math.max(currentZoom * previewRatio, 0.5), 5.0);
+                        applyCommittedZoom(targetZoom, pinchFocalX, pinchFocalY);
+                    }
+                }
+            }
+        }, { passive: true });
+
+        // Distinguish single-tap (focus mode) vs double-tap (zoom toggle) with 250ms window
+        scroller.addEventListener('click', function (e) {
+            if (isPrintMode) return;
+            const target = e.target && e.target.closest ? e.target.closest('a, button, input') : null;
+            if (target) return;
+
+            const now = Date.now();
+            const distFromLastTap = Math.hypot(e.clientX - lastTapPosition.x, e.clientY - lastTapPosition.y);
+            lastTapPosition = { x: e.clientX, y: e.clientY };
+
+            if (now - lastTapTime < 280 && distFromLastTap < 40) {
+                // Double Tap!
+                lastTapTime = 0;
+                if (singleTapTimer) { clearTimeout(singleTapTimer); singleTapTimer = null; }
+                const newZoom = (currentZoom > 1.4) ? 1.0 : 2.0;
+                applyCommittedZoom(newZoom, e.clientX, e.clientY);
+                if (window.Android && window.Android.onDocumentDoubleTap) {
+                    window.Android.onDocumentDoubleTap();
+                }
+            } else {
+                lastTapTime = now;
+                if (singleTapTimer) clearTimeout(singleTapTimer);
+                singleTapTimer = setTimeout(() => {
+                    singleTapTimer = null;
+                    if (window.Android && window.Android.onDocumentTap) {
+                        window.Android.onDocumentTap();
+                    }
+                }, 250);
+            }
+        });
+
+        // ---------------------------------------------------------------------------
+        // Rendering & Loading
+        // ---------------------------------------------------------------------------
+        function setDarkMode(isDark) {
+            if (isPrintMode) return;
+            document.body.classList.toggle('dark', Boolean(isDark));
+            document.documentElement.classList.toggle('dark', Boolean(isDark));
+        }
+
+        function scrollToPage(pageNumber) {
+            const pages = document.querySelectorAll('#output .docx');
+            const page = pages[Math.max(0, Math.min(pages.length - 1, Number(pageNumber) - 1))];
+            if (page) page.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        function observePages() {
+            if (pageObserver) pageObserver.disconnect();
+            const pages = Array.from(document.querySelectorAll('#output .docx'));
+            if (!pages.length || !('IntersectionObserver' in window)) return;
+            pageObserver = new IntersectionObserver(function (entries) {
+                const visible = entries.filter(entry => entry.isIntersecting);
+                if (!visible.length) return;
+                const center = (window.innerHeight || 0) / 2;
+                visible.sort((a, b) => {
+                    const rectA = a.boundingClientRect;
+                    const rectB = b.boundingClientRect;
+                    return Math.abs((rectA.top + rectA.bottom) / 2 - center) - Math.abs((rectB.top + rectB.bottom) / 2 - center);
+                });
+                const currentIndex = pages.indexOf(visible[0].target);
+                if (window.Android && window.Android.onPageChanged && currentIndex >= 0) {
+                    window.Android.onPageChanged(currentIndex + 1, pages.length);
+                }
+            }, { threshold: [0.15, 0.5, 0.85] });
+            pages.forEach(page => pageObserver.observe(page));
+        }
+
+        function base64ToBuffer(value) {
+            const binaryString = window.atob(value);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        function fetchDocumentBytes() {
+            return fetch('/docx-src/document.docx', { credentials: 'omit' }).then(function (response) {
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                return response.arrayBuffer();
+            });
+        }
+
+        function showLoadError(message) {
+            const loadingEl = document.getElementById("loading");
+            if (loadingEl) loadingEl.style.display = 'none';
+            if (container) container.innerHTML = '<div class="error-banner">' + message + '</div>';
+            if (window.Android && window.Android.onDocumentError) {
+                window.Android.onDocumentError(message);
+            }
+        }
+
+        function renderDocument(arrayBuffer) {
+            if (!container) return;
+            const staging = document.createElement("div");
+            staging.style.position = "absolute";
+            staging.style.left = "-100000px";
+            staging.style.top = "0";
+            staging.style.visibility = "hidden";
+            staging.style.pointerEvents = "none";
+            staging.style.width = "max-content";
+            staging.style.minWidth = "100%";
+            container.appendChild(staging);
+
+            const options = {
+                className: "docx",
+                inWrapper: true,
+                ignoreWidth: false,
+                ignoreHeight: false,
+                ignoreFonts: false,
+                breakPages: true,
+                ignoreLastRenderedPageBreak: false,
+                experimental: true,
+                trimXmlDeclaration: true,
+                debug: false
+            };
+
+            docx.renderAsync(arrayBuffer, staging, null, options).then(function() {
+                const pages = staging.querySelectorAll('.docx');
+                const totalPages = pages.length > 0 ? pages.length : 1;
+                if (pages.length > 0) {
+                    measuredPageWidth = pages[0].offsetWidth || pages[0].getBoundingClientRect().width || 800;
+                }
+                const renderedNodes = Array.from(staging.childNodes);
+                container.replaceChildren(...renderedNodes);
+
+                baseScale = calculateBaseScale();
+                container.style.zoom = String(getEffectiveZoom());
+
+                if (!isPrintMode && document.body.classList.contains('dark')) {
+                    setDarkMode(true);
+                }
+                observePages();
+
+                if (window.Android && window.Android.onDocumentLoaded) {
+                    window.Android.onDocumentLoaded(totalPages);
+                }
+                if (isPrintMode && window.Android && window.Android.onPrintReady) {
+                    window.Android.onPrintReady();
+                }
+            }).catch(function(err) {
+                staging.remove();
+                console.error("renderAsync error:", err);
+                showLoadError("Could not render formatted layout (" + (err ? err.toString() : 'Unknown error') + ").");
+            });
+        }
+
+        function loadDocx(base64, isDark) {
+            if (!isPrintMode) setDarkMode(isDark);
+
+            if (typeof docx === 'undefined' || typeof JSZip === 'undefined') {
+                showLoadError("Document preview engine components could not be loaded.");
+                return;
+            }
+
+            if (!base64 || base64.trim().length === 0) {
+                fetchDocumentBytes().then(function (buffer) {
+                    renderDocument(buffer);
+                }).catch(function (fetchError) {
+                    console.warn("docx-src fetch failed, falling back to bridge", fetchError);
+                    let bridged = null;
+                    if (window.Android && window.Android.getDocxBase64) {
+                        try { bridged = window.Android.getDocxBase64(); } catch (e) {}
+                    }
+                    if (!bridged || bridged.trim().length === 0) {
+                        showLoadError("Document data is empty or unavailable.");
+                        return;
+                    }
+                    renderDocument(base64ToBuffer(bridged));
+                });
+                return;
+            }
+
+            try {
+                renderDocument(base64ToBuffer(base64));
+            } catch (err) {
+                showLoadError("Invalid DOCX format (" + (err ? err.toString() : 'Parse error') + ")");
+            }
+        }
+
+        // ---------------------------------------------------------------------------
+        // In-Document Text Search
+        // ---------------------------------------------------------------------------
+        let maxSearchHighlights = 5000;
+        let searchMatches = [];
+        let currentMatchIdx = -1;
+        let totalSearchMatches = 0;
+        let searchMatchesTruncated = false;
+
+        function notifySearchCount() {
+            if (window.Android && window.Android.onSearchResultCount) {
+                window.Android.onSearchResultCount(totalSearchMatches, currentMatchIdx, searchMatchesTruncated);
+            }
+        }
+
+        function clearSearch() {
+            document.querySelectorAll('mark.docx-highlight').forEach(el => {
+                const parent = el.parentNode;
+                if (parent) {
+                    parent.replaceChild(document.createTextNode(el.textContent || ''), el);
+                    parent.normalize();
+                }
+            });
+            searchMatches = [];
+            currentMatchIdx = -1;
+            totalSearchMatches = 0;
+            searchMatchesTruncated = false;
+        }
+
+        function searchWord(keyword) {
+            clearSearch();
+            const query = String(keyword || '').trim().toLowerCase();
+            if (!query || !container) {
+                notifySearchCount();
+                return 0;
+            }
+
+            const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+                acceptNode: function (node) {
+                    const parent = node.parentElement;
+                    if (!parent || !node.nodeValue || parent.closest('script, style, button, mark.docx-highlight')) {
+                        return NodeFilter.FILTER_REJECT;
+                    }
+                    return NodeFilter.FILTER_ACCEPT;
+                }
+            });
+            const textNodes = [];
+            while (walker.nextNode()) textNodes.push(walker.currentNode);
+            const foundMatches = [];
+            let totalCount = 0;
+
+            for (const node of textNodes) {
+                const text = node.nodeValue || '';
+                const lower = text.toLowerCase();
+                let index = lower.indexOf(query);
+                if (index < 0) continue;
+                const fragment = document.createDocumentFragment();
+                let last = 0;
+                while (index >= 0) {
+                    totalCount++;
+                    fragment.appendChild(document.createTextNode(text.substring(last, index)));
+                    if (foundMatches.length < maxSearchHighlights) {
+                        const mark = document.createElement('mark');
+                        mark.className = 'docx-highlight';
+                        mark.textContent = text.substring(index, index + query.length);
+                        fragment.appendChild(mark);
+                        foundMatches.push(mark);
+                    }
+                    last = index + query.length;
+                    index = lower.indexOf(query, last);
+                }
+                fragment.appendChild(document.createTextNode(text.substring(last)));
+                if (node.parentNode) node.parentNode.replaceChild(fragment, node);
+            }
+
+            searchMatches = foundMatches;
+            totalSearchMatches = totalCount;
+            searchMatchesTruncated = totalCount > foundMatches.length;
+            if (searchMatches.length > 0) highlightMatch(0);
+            else notifySearchCount();
+            return totalSearchMatches;
+        }
+
+        function highlightMatch(idx) {
+            if (!searchMatches.length) {
+                currentMatchIdx = -1;
+                notifySearchCount();
+                return 0;
+            }
+            currentMatchIdx = ((idx % searchMatches.length) + searchMatches.length) % searchMatches.length;
+            searchMatches.forEach((match, index) => {
+                match.className = index === currentMatchIdx
+                    ? 'docx-highlight docx-highlight-active'
+                    : 'docx-highlight';
+            });
+            searchMatches[currentMatchIdx].scrollIntoView({ behavior: 'smooth', block: 'center' });
+            notifySearchCount();
+            return currentMatchIdx + 1;
+        }
+
+        function nextSearchMatch() {
+            return searchMatches.length ? highlightMatch(currentMatchIdx + 1) : 0;
+        }
+
+        function prevSearchMatch() {
+            return searchMatches.length ? highlightMatch(currentMatchIdx - 1) : 0;
+        }
+    </script>
+</body>
+</html>

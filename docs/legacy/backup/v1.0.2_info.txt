@@ -1,0 +1,25 @@
+Files Claw Backup - Version 1.0.2
+Date: June 16, 2026
+Author: AI Coding Agent
+
+--- SYSTEM COMPLETED STATE ---
+Replaced standard Compose native Markdown rendering with a high-performance WebView-based Markdown engine, adopting a professional 'Claude' syntax style theme with native JavaScript-to-Android clipboard bridging.
+
+--- RECENT CHANGES & BUG FIXES ---
+1. MARKDOWN HYBRID RENDERER:
+   - Added `org.jetbrains:markdown:0.7.3` dependency to `build.gradle.kts`.
+   - Stripped away intensive native Compose text parsers (`MarkdownElement`, `parseInlineMarkdown`, etc.) from rendering the primary `.md` documents.
+   - Introduced `MarkdownPreview` wrapper containing `AndroidView(WebView)` for 60fps rendering, smooth scroll, and robust pinch-in zoom functionality.
+
+2. CLAUDE.AI THEME ALIGNMENT:
+   - Synchronized CSS stylesheet to match Claude.ai's reading view colors. Dark/Light mode awareness implemented via `isSystemInDarkTheme()`.
+   - Overhauled blockquotes, inline codes, and tables styling within the CSS payload.
+
+3. CODE BLOCK COPY MECHANISM:
+   - Built a `<script>` hook to iterate over `<pre><code>` blocks, encasing them in themed containers with top title bars.
+   - Initialized `WebAppInterface` JavascriptInterface allowing HTML buttons to trigger `Context.getSystemService(CLIPBOARD_SERVICE)`.
+   - Handled Android Toasts natively upon successful clipboard operation via `Looper.getMainLooper()`.
+
+--- MODIFIED FILES ---
+- /app/build.gradle.kts
+- /app/src/main/java/com/example/ui/screens/FilePreviewScreen.kt

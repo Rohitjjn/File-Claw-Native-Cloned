@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <script src="jszip.min.js"></script>
+    <script src="pptx-preview.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #faf9f5;
+            --text-primary: #141413;
+            --border: #e6dfd8;
+            --slide-bg: #ffffff;
+        }
+        body.dark {
+            --bg-color: #151514;
+            --text-primary: #f5f5f3;
+            --border: #2d2b28;
+            --slide-bg: #2d2b28;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow-x: hidden;
+        }
+        #toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            padding: 8px;
+            background: var(--bg-color);
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        button {
+            padding: 6px 12px;
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:active {
+            background: rgba(128,128,128,0.2);
+        }
+        #editor-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+        }
+        .slide {
+            width: 800px;
+            height: 450px;
+            background: var(--slide-bg);
+            position: relative;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transform-origin: top left;
+            overflow: hidden;
+        }
+        .slide-text {
+            position: absolute;
+            outline: none;
+            border: 1px dashed transparent;
+            word-wrap: break-word;
+        }
+        .slide-text:focus {
+            border-color: #007bff;
+            background: rgba(255,255,255,0.1);
+        }
+        .slide-img {
+            position: absolute;
+            cursor: pointer;
+            border: 2px solid transparent;
+        }
+        .slide-img:active {
+            border-color: #007bff;
+        }
+        .controls {
+            display: flex;
+            gap: 8px;
+            margin-left: auto;
+        }
+    </style>
+</head>
+<body>
+    <div id="toolbar">
+        <div class="controls">
+            <button onclick="if(window.Android) window.Android.exitWithoutSaving()">Close</button>
+        </div>
+    </div>
+    <div id="editor-container">
+        <!-- Slides will be rendered here -->
+    </div>
+
+    <script>
+        function loadPptx(base64, isDark) {
+            if (isDark) document.body.classList.add('dark');
+            
+            if (typeof pptxPreview === 'undefined' || typeof JSZip === 'undefined') {
+                if (window.Android && window.Android.onDocumentError) {
+                    window.Android.onDocumentError("Required libraries (pptx-preview or jszip) failed to load");
+                }
+                return;
+            }
+            
+            try {
+                const binary_string = window.atob(base64);
+                const len = binary_string.length;
+                const bytes = new Uint8Array(len);
+                for (let i = 0; i < len; i++) {
+                    bytes[i] = binary_string.charCodeAt(i);
+                }
+                const arrayBuffer = bytes.buffer;
+                
+                const container = document.getElementById("editor-container");
+                const viewer = pptxPreview.init(container, {
+                    width: window.innerWidth - 32,
+                    mode: 'slide'
+                });
+                
+                viewer.preview(arrayBuffer).then(function() {
+                    if (window.Android && window.Android.onDocumentLoaded) {
+                        window.Android.onDocumentLoaded(viewer.slideCount || 1);
+                    }
+                }).catch(function(err) {
+                    if (window.Android && window.Android.onDocumentError) {
+                        window.Android.onDocumentError(err.toString());
+                    } else {
+                        document.getElementById("editor-container").innerHTML = "Error rendering PPTX: " + err.toString();
+                    }
+                });
+            } catch (err) {
+                if (window.Android && window.Android.onDocumentError) {
+                    window.Android.onDocumentError(err.toString());
+                }
+            }
+        }
+    </script>
+</body>
+</html>

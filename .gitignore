@@ -1,0 +1,15 @@
+# Local toolchain, build outputs and secrets
+.gradle/
+**/build/
+local.properties
+.idea/
+*.iml
+*.log
+.env
+.env.*
+!.env.example
+*.keystore
+*.keystore.base64
+*.jks
+.cxx/
+.externalNativeBuild/

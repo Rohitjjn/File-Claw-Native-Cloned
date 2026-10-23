@@ -1,0 +1,195 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 3,
+    "identityHash": "b75336790bc80ce1205dc7dbec41b7d0",
+    "entities": [
+      {
+        "tableName": "recent_files",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `path` TEXT NOT NULL, `name` TEXT NOT NULL, `size` INTEGER NOT NULL, `extension` TEXT NOT NULL, `lastOpened` INTEGER NOT NULL, `isSample` INTEGER NOT NULL, `parentZipPath` TEXT, `zipEntryPath` TEXT)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "path",
+            "columnName": "path",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "size",
+            "columnName": "size",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "extension",
+            "columnName": "extension",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastOpened",
+            "columnName": "lastOpened",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isSample",
+            "columnName": "isSample",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "parentZipPath",
+            "columnName": "parentZipPath",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "zipEntryPath",
+            "columnName": "zipEntryPath",
+            "affinity": "TEXT",
+            "notNull": false
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_recent_files_lastOpened",
+            "unique": false,
+            "columnNames": [
+              "lastOpened"
+            ],
+            "orders": [
+              "DESC"
+            ],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_recent_files_lastOpened` ON `${TABLE_NAME}` (`lastOpened` DESC)"
+          },
+          {
+            "name": "index_recent_files_path",
+            "unique": false,
+            "columnNames": [
+              "path"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_recent_files_path` ON `${TABLE_NAME}` (`path`)"
+          }
+        ],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "settings",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `theme` TEXT NOT NULL, `fontSize` TEXT NOT NULL, `showLineNumbers` INTEGER NOT NULL, `wordWrap` INTEGER NOT NULL, `autoSaveDrafts` INTEGER NOT NULL, `defaultToEditOnOpen` INTEGER NOT NULL, `tabSize` INTEGER NOT NULL, `defaultEncoding` TEXT NOT NULL, `historyLimit` INTEGER NOT NULL, `notificationFileOpen` INTEGER NOT NULL, `notificationSaveComplete` INTEGER NOT NULL, `notificationLowStorage` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "theme",
+            "columnName": "theme",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fontSize",
+            "columnName": "fontSize",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "showLineNumbers",
+            "columnName": "showLineNumbers",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "wordWrap",
+            "columnName": "wordWrap",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "autoSaveDrafts",
+            "columnName": "autoSaveDrafts",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "defaultToEditOnOpen",
+            "columnName": "defaultToEditOnOpen",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tabSize",
+            "columnName": "tabSize",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "defaultEncoding",
+            "columnName": "defaultEncoding",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "historyLimit",
+            "columnName": "historyLimit",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notificationFileOpen",
+            "columnName": "notificationFileOpen",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notificationSaveComplete",
+            "columnName": "notificationSaveComplete",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notificationLowStorage",
+            "columnName": "notificationLowStorage",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      }
+    ],
+    "views": [],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'b75336790bc80ce1205dc7dbec41b7d0')"
+    ]
+  }
+}

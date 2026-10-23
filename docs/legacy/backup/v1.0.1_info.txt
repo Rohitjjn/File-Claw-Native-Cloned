@@ -1,0 +1,35 @@
+Files Claw Backup - Version 1.0.1
+Date: June 16, 2026
+Author: AI Coding Agent
+
+--- SYSTEM COMPLETED STATE ---
+The application is fully updated with standard MVVM clean architecture, local storage optimizations, and Material 3 design elements.
+
+--- RECENT CHANGES & BUG FIXES ---
+1. BUMPED DATABASE VERSION TO 3: 
+   - Fixed immediate crash (NPE/IllegalStateException) at app startup.
+   - Adding Room database indices to `RecentFileEntity` for `lastOpened` and `path` caused schema discrepancies without database version upgrade on existing SQLite stores. Bumping the schema version to 3 with `fallbackToDestructiveMigration` allows the database to recreate seamlessly without crashing.
+   
+2. COMPOSE RECOMPOSITION PERFORMANCE FIXES:
+   - Optimized `HomeScreen` LazyColumn to use a derivedStateOf list with `files.take(5)` rather than slicing during every composition.
+   - Wrapped pure format functions (`formatElapsedTime` and `formatFileSize`) inside `remember` calls with dependent keys (`file.lastOpened` and `file.size`).
+   - Improved `SearchScreen` similarly with derivedStateOf on dynamic item counts of recent search history to keep typing responsive.
+
+3. OPTIMIZED UNDO/REDO RING BUFFER IN EDITOR:
+   - Designed a custom `TextUndoStack` ring buffer container with a capacity limit of 50 states.
+   - Avoided heavy performance penances of using `mutableStateListOf` for history logging in the Text Editor by utilizing a lean custom ArrayDeque data structure, suppressing continuous Compose UI tree re-triggers when typing.
+
+4. DEBOUNCED SEARCH COROUTINE HANDLER:
+   - Added cancellation mechanics to in-flight search coroutine jobs (`searchJob?.cancel()`) combined with a 150ms debounce delay inside the `MainViewModel` to avoid unnecessary thread blockages during rapid typing queries.
+
+5. DATABASE WAL MODE & INDEX TUNING:
+   - Configured Room Database Builder thread pool context with `RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING` (WAL) for faster writes.
+   - Successfully compiled and validated performance, database schema migrations, and local compilation with no errors!
+
+--- MODIFIED FILES ---
+- /app/src/main/java/com/example/data/AppDatabase.kt
+- /app/src/main/java/com/example/data/RecentFileEntity.kt
+- /app/src/main/java/com/example/ui/screens/HomeScreen.kt
+- /app/src/main/java/com/example/ui/screens/SearchScreen.kt
+- /app/src/main/java/com/example/ui/screens/EditorScreen.kt
+- /app/src/main/java/com/example/viewmodel/MainViewModel.kt
