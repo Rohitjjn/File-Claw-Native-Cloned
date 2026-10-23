@@ -47,6 +47,11 @@ import androidx.core.view.WindowInsetsControllerCompat
 import com.example.ui.component.DocumentOutlineBottomSheet
 import com.example.ui.component.AppearanceBottomSheet
 import com.example.feature.fileinfo.FilePropertiesBottomSheet
+import com.example.feature.editor.TextUndoStack
+import com.example.feature.editor.applyTabIndent
+import com.example.feature.editor.applyMarkdownWrap
+import com.example.feature.editor.InlineEditWorkspace
+import com.example.feature.editor.EditHistoryDialog
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
