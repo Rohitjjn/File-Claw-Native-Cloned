@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   verify:
-    name: Compile and test Android app
+    name: Compile debug and minified release; run unit tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
@@ -48,6 +48,11 @@ jobs:
 
       - name: Compile debug APK
         run: ./gradlew :app:assembleDebug --stacktrace
+
+      # Release enables R8/resource shrinking. Keep this in CI so shrinker-only
+      # regressions in WebView JavaScript bridges and packaged renderer assets are caught.
+      - name: Compile minified release APK
+        run: ./gradlew :app:assembleRelease --stacktrace
 
       - name: Run unit tests
         run: ./gradlew :app:testDebugUnitTest --stacktrace
