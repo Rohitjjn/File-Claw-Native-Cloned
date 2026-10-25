@@ -17,6 +17,7 @@ import java.io.File
 import java.io.FileInputStream
 import com.example.platform.webview.MimeAwareAssetsPathHandler
 import java.io.FileOutputStream
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Native Print and Export helper using Android's PrintManager & PrintDocumentAdapter.
@@ -261,8 +262,7 @@ object FilePrintHelper {
                 // print from. documentRendered just lets the safety timeout below extend
                 // itself while real (large-document) rendering is still legitimately under
                 // way, instead of ever triggering a print on its own.
-                @Volatile
-                var documentRendered = false
+                val documentRendered = AtomicBoolean(false)
 
                 tempWebView.addJavascriptInterface(object : Any() {
                     @android.webkit.JavascriptInterface
@@ -272,7 +272,7 @@ object FilePrintHelper {
 
                     @android.webkit.JavascriptInterface
                     fun onDocumentLoaded(totalPages: Int) {
-                        documentRendered = true
+                        documentRendered.set(true)
                     }
 
                     @android.webkit.JavascriptInterface
@@ -315,11 +315,11 @@ object FilePrintHelper {
                 fun armSafetyTimeout(afterMs: Long) {
                     mainHandler.postDelayed({
                         if (printSubmitted) return@postDelayed
-                        if (documentRendered) {
+                        if (documentRendered.get()) {
                             // Rendering finished but preparePrintLayout()/onPrintReady has not
                             // fired yet (slow fonts/images) -- give it one more fixed window
                             // instead of falling back while a correct print is still coming.
-                            documentRendered = false
+                            documentRendered.set(false)
                             armSafetyTimeout(8_000L)
                         } else {
                             fallbackTextPrint("Format timeout")
