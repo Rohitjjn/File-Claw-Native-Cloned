@@ -362,17 +362,21 @@ fun FilePreviewScreen(
     var showDocxZoomDialog by remember { mutableStateOf(false) }
     var showOutlineBottomSheet by remember { mutableStateOf(false) }
     var showAppearanceBottomSheet by remember { mutableStateOf(false) }
-    val docxZoomSeedContext = LocalContext.current
+    // DOCX zoom is relative to fit-to-width (100% = the page fits the screen), so it is
+    // never restored from an old persisted raw percentage: every DOCX opens fitted.
     var docxZoomFactor by remember(activeFile?.path) {
-        mutableFloatStateOf(
-            DocxZoomPolicy.fromPercent(ViewerAppearancePrefs.getDocxZoomPercent(docxZoomSeedContext))
-        )
+        mutableFloatStateOf(DocxZoomPolicy.DEFAULT_ZOOM)
     }
     var docxZoomInput by remember(activeFile?.path) { mutableStateOf(DocxZoomPolicy.defaultPercent().toString()) }
-    // Loop 12 (Bug A): true between the first pinch frame and the gesture settle. The
-    // DOCX zoom pipeline switches to the compositor-only preview path while it is set
-    // and applies one authoritative CSS zoom when it flips back to false.
-    var docxPinchActive by remember { mutableStateOf(false) }
+    // The rotate button locks the screen orientation; leaving the viewer must hand
+    // rotation back to the system (otherwise the whole app stays locked sideways).
+    val orientationContext = LocalContext.current
+    DisposableEffect(Unit) {
+        onDispose {
+            orientationContext.findHostActivity()?.requestedOrientation =
+                com.example.platform.lifecycle.ScreenOrientationPolicy.RESTORE_ORIENTATION
+        }
+    }
     var searchTriggerNext by remember { mutableIntStateOf(0) }
     var searchTriggerPrev by remember { mutableIntStateOf(0) }
 
@@ -454,13 +458,6 @@ fun FilePreviewScreen(
         viewerSyntaxTheme = ViewerAppearancePrefs.getTheme(context)
         viewerFontSizeSp = ViewerAppearancePrefs.getFontSize(context)
         viewerZoomPercent = ViewerAppearancePrefs.getZoomPercent(context)
-    }
-
-    // Persist the DOCX zoom preference (debounced so pinch gestures never spam disk).
-    val docxZoomPersistContext = LocalContext.current
-    LaunchedEffect(docxZoomFactor) {
-        kotlinx.coroutines.delay(400)
-        ViewerAppearancePrefs.setDocxZoomPercent(docxZoomPersistContext, DocxZoomPolicy.toPercent(docxZoomFactor))
     }
 
     // Auto-focus the in-document search field (and raise the keyboard) when the overlay opens.
@@ -1012,12 +1009,15 @@ fun FilePreviewScreen(
                                                     com.example.platform.print.FilePrintHelper.printPdf(context, java.io.File(entity.path), entity.name)
                                                 }
                                                 ext in setOf("docx", "doc") -> {
-                                                    val renderedWebView = docxPreviewWebView
-                                                    if (docxPreviewReady && renderedWebView != null) {
-                                                        com.example.platform.print.FilePrintHelper.printWebView(context, renderedWebView, entity.name)
-                                                    } else {
-                                                        com.example.platform.print.FilePrintHelper.printDocx(context, java.io.File(entity.path), entity.name)
-                                                    }
+                                                    // Always print through the dedicated ?print=1 renderer, never the
+                                                    // on-screen viewer: the live WebView carries the reader's current
+                                                    // zoom (CSS `zoom`, often well under 100% to fit the screen) and
+                                                    // possible dark-mode colors, neither of which the print pipeline
+                                                    // re-fits to the page -- that is what made printed DOCX files come
+                                                    // out shrunk/odd-colored (reported as "like plain text"). The
+                                                    // dedicated renderer waits for fonts/images and fits every section
+                                                    // to the printable A4 width before a single page is submitted.
+                                                    com.example.platform.print.FilePrintHelper.printDocx(context, java.io.File(entity.path), entity.name)
                                                 }
                                                 ext == "md" || ext == "txt" -> {
                                                     val textState = fileState as? FileContentState.TextSuccess
@@ -1332,12 +1332,9 @@ fun FilePreviewScreen(
                                     IconButton(
                                         onClick = {
                                             activeFile?.let {
-                                                val renderedWebView = docxPreviewWebView
-                                                if (docxPreviewReady && renderedWebView != null) {
-                                                    com.example.platform.print.FilePrintHelper.printWebView(context, renderedWebView, it.name)
-                                                } else {
-                                                    com.example.platform.print.FilePrintHelper.printDocx(context, java.io.File(it.path), it.name)
-                                                }
+                                                // See the Print menu above: DOCX always prints via the dedicated
+                                                // ?print=1 renderer, never the live on-screen viewer.
+                                                com.example.platform.print.FilePrintHelper.printDocx(context, java.io.File(it.path), it.name)
                                             }
                                         },
                                         modifier = Modifier.size(36.dp)
@@ -1997,12 +1994,6 @@ fun FilePreviewScreen(
                         scrollToPage = scrollToPage,
                         scrollToken = pageJumpToken,
                         onScrollToPageHandled = { scrollToPage = null },
-                        scrubberPage = currentPdfPage,
-                        scrubberPageCount = totalPdfPages,
-                        onScrubJump = { page ->
-                            scrollToPage = page - 1
-                            pageJumpToken++
-                        },
                         onSearchSnapshot = { snapshot, searching ->
                             pdfSearchSnapshot = snapshot
                             totalMatchesCount = snapshot.count
@@ -2026,7 +2017,6 @@ fun FilePreviewScreen(
                 }
                 is FileContentState.DocxSuccess -> {
                     DocxPreviewWebView(
-                        base64Docx = state.base64Data,
                         fileEntity = state.file,
                         isNightMode = isDocxNightMode,
                         viewModel = viewModel,
@@ -2046,21 +2036,12 @@ fun FilePreviewScreen(
                             searchResultsTruncated = truncated
                         },
                         zoomFactor = docxZoomFactor,
-                        pinchActive = docxPinchActive,
                         onWebViewCreated = { docxPreviewWebView = it },
                         onDocumentReady = { docxPreviewReady = true },
                         onSingleTap = { isBarsVisible = !isBarsVisible },
                         onZoomChanged = { factor -> docxZoomFactor = factor },
-                        onPinchZoom = { delta ->
-                            docxPinchActive = true
-                            docxZoomFactor = com.example.formats.docx.DocxZoomPolicy.applyPinch(docxZoomFactor, delta)
-                        },
-                        onPinchSettled = {
-                            docxPinchActive = false
-                        },
-                        onDoubleTap = {
-                            docxZoomFactor = com.example.formats.docx.DocxZoomPolicy.toggleDoubleTap(docxZoomFactor)
-                        },
+                        // Double-tap (fit <-> 200%) and pinch are handled inside the page;
+                        // the resulting zoom is reported back through onZoomChanged.
                         onRendererFallback = { isFallback -> isDocxRenderFallback = isFallback }
                     )
                 }

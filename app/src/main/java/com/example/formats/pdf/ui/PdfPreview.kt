@@ -28,16 +28,26 @@ import androidx.compose.animation.core.tween
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.unit.IntOffset
+import kotlinx.coroutines.delay
 import com.example.formats.pdf.PdfAssetUriPolicy
 import com.example.formats.pdf.PdfRangeResponder
 import com.example.formats.pdf.PdfPageSearchMatch
@@ -58,11 +68,6 @@ fun PdfPreview(
     // Loop 14: bumped per explicit jump so repeated identical page numbers still fire.
     scrollToken: Int = 0,
     onScrollToPageHandled: () -> Unit,
-    // Loop 14: right-edge page scrubber inputs. Values come from the visible-page
-    // observer in the caller; jumps are delegated back through onScrubJump.
-    scrubberPage: Int = 1,
-    scrubberPageCount: Int = 0,
-    onScrubJump: (Int) -> Unit = {},
     onSearchSnapshot: (PdfSearchSnapshot, Boolean) -> Unit = { _, _ -> },
     onSearchError: (String) -> Unit = {},
     modifier: Modifier = Modifier,
@@ -78,19 +83,12 @@ fun PdfPreview(
     val assetLoader = remember(context, fileEntity.path) {
         androidx.webkit.WebViewAssetLoader.Builder()
             .addPathHandler("/assets/", MimeAwareAssetsPathHandler(context))
+            // Range-aware responses are produced in shouldInterceptRequest (it has the
+            // request headers); this handler is the header-less fallback for the same URL.
             .addPathHandler("/search-pdf/", object : androidx.webkit.WebViewAssetLoader.PathHandler {
                 override fun handle(path: String): android.webkit.WebResourceResponse? {
-                    if (path != "document.pdf" || !pdfFile.isFile) return null
-                    return runCatching {
-                        android.webkit.WebResourceResponse(
-                            "application/pdf",
-                            "binary",
-                            200,
-                            "OK",
-                            mapOf("Content-Length" to pdfFile.length().toString(), "Accept-Ranges" to "none"),
-                            java.io.FileInputStream(pdfFile)
-                        )
-                    }.getOrNull()
+                    if (path != "document.pdf") return null
+                    return runCatching { PdfRangeResponder.respond(pdfFile, null) }.getOrNull()
                 }
             })
             .build()
@@ -106,6 +104,12 @@ fun PdfPreview(
     // Loop 12 (Bug C): bumped to force a fresh WebView after a renderer crash. The
     // crashed instance can never be reused, so recovery replaces the whole view.
     var pdfReloadKey by remember(fileEntity.path) { mutableIntStateOf(0) }
+    // Page-scroller state, fed by the reader's scroll tracking (page space, 0..1).
+    var scrollerPage by remember(fileEntity.path) { mutableIntStateOf(1) }
+    var scrollerTotal by remember(fileEntity.path) { mutableIntStateOf(0) }
+    var scrollerPosition by remember(fileEntity.path) { mutableFloatStateOf(0f) }
+    // -1 = size unknown (indeterminate spinner), otherwise 0..99.
+    var loadProgress by remember(fileEntity.path) { mutableIntStateOf(-1) }
 
     // Settles pinch-zoom gestures: after the user lifts their fingers the visible pages
     // re-rasterize at the new resolution (Google Drive reader behavior).
@@ -176,6 +180,20 @@ fun PdfPreview(
         }
     }
 
+    // Last-resort watchdog. The reader has its own boot guard and open-strategy
+    // fallbacks (about 10 s each); if nothing at all has come back after this long the
+    // viewer reports a clear, retryable error instead of an endless spinner. It is not
+    // armed while the password dialog is up (that is user time, not a stall).
+    LaunchedEffect(pdfReloadKey, isPdfReady, pdfErrorMessage, requirePassword, fileEntity.path) {
+        if (!isPdfReady && pdfErrorMessage == null && !requirePassword) {
+            delay(PDF_OPEN_WATCHDOG_MS)
+            if (!isPdfReady && pdfErrorMessage == null && !requirePassword) {
+                android.util.Log.e("PdfJsReader", "Open watchdog fired for a ${pdfFile.length()} byte file")
+                pdfErrorMessage = "The PDF viewer did not respond. Check that Android System WebView is up to date, then try again."
+            }
+        }
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -206,6 +224,7 @@ fun PdfPreview(
                                     onReady = { isJavascriptReady = true },
                                     onDocumentLoaded = { pageCount ->
                                         isPdfReady = true
+                                        scrollerTotal = pageCount
                                         requirePassword = false
                                         passwordError = false
                                         pdfErrorMessage = null
@@ -215,6 +234,12 @@ fun PdfPreview(
                                         bookmarkPrefs.edit().putInt(bookmarkKey, (page - 1).coerceAtLeast(0)).apply()
                                         latestPageChanged.value(page, pageCount)
                                     },
+                                    onScrollProgress = { page, pageCount, position ->
+                                        scrollerPage = page
+                                        scrollerTotal = pageCount
+                                        scrollerPosition = position.coerceIn(0f, 1f)
+                                    },
+                                    onLoadProgress = { percent -> loadProgress = percent },
                                     onSearchSnapshot = { snapshot, searching -> latestSearchSnapshot.value(snapshot, searching) },
                                     onSearchError = { message -> latestSearchError.value(message) },
                                     onPasswordRequired = { reason ->
@@ -243,6 +268,30 @@ fun PdfPreview(
                                     view: android.webkit.WebView,
                                     url: String
                                 ): Boolean = !PdfAssetUriPolicy.isBundledReaderUri(android.net.Uri.parse(url))
+
+                                override fun onReceivedError(
+                                    view: android.webkit.WebView,
+                                    request: android.webkit.WebResourceRequest,
+                                    error: androidx.webkit.WebResourceErrorCompat
+                                ) {
+                                    if (request.isForMainFrame) {
+                                        android.util.Log.e("PdfJsReader", "Reader page failed to load: ${error.description}")
+                                        pdfErrorMessage = "The PDF viewer page could not be loaded."
+                                        isPdfReady = false
+                                    }
+                                }
+
+                                override fun onReceivedHttpError(
+                                    view: android.webkit.WebView,
+                                    request: android.webkit.WebResourceRequest,
+                                    errorResponse: android.webkit.WebResourceResponse
+                                ) {
+                                    // Never log document bytes or content; URL path + status only.
+                                    android.util.Log.w(
+                                        "PdfJsReader",
+                                        "HTTP ${errorResponse.statusCode} for ${request.url.path}"
+                                    )
+                                }
 
                                 override fun onScaleChanged(
                                     view: android.webkit.WebView,
@@ -338,26 +387,25 @@ fun PdfPreview(
         }
 
         if (!isPdfReady && pdfErrorMessage == null) {
-            // Loop 14: skeleton loading — neutral page-shaped placeholders with a soft
-            // shimmer replace the spinner-only screen during document open/metadata/
-            // password initialization. The password dialog overlays this skeleton; the
-            // error state below replaces it entirely.
-            PdfOpeningSkeleton()
+            // Rounded loading indicator (replaces the old page-shaped skeleton). The
+            // password dialog overlays it; the error state below replaces it entirely.
+            PdfRoundedLoading(progress = loadProgress)
         }
 
-        // Loop 14: right-edge page scrubber. Only rendered once the document is ready
-        // and there is more than one page; the visible-page observer keeps it in sync
-        // (page events flow up through onPageChanged), jumps flow down through the
-        // shared gotoPdfPage pipeline (no eager rendering of the pages passed over).
-        if (isPdfReady && pdfErrorMessage == null && scrubberPageCount > 1) {
+        // Right-edge page scroller: always shows the page number, follows the reading
+        // position 1 -> last page, and scrolls the document live while it is dragged.
+        if (isPdfReady && pdfErrorMessage == null && scrollerTotal > 1) {
             PdfPageScrubber(
-                currentPage = scrubberPage.coerceIn(1, scrubberPageCount),
-                pageCount = scrubberPageCount,
-                onJumpRequest = onScrubJump,
+                page = scrollerPage.coerceIn(1, scrollerTotal),
+                pageCount = scrollerTotal,
+                position = scrollerPosition,
+                onScrub = { position ->
+                    webViewRef?.evaluateJavascript("if (window.scrubToPosition) scrubToPosition($position);", null)
+                },
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
-                    .navigationBarsPadding()
-                    .padding(end = 2.dp)
+                    .fillMaxHeight()
+                    .padding(vertical = 10.dp)
             )
         }
 
@@ -431,212 +479,229 @@ fun PdfPreview(
     }
 }
 
+private const val PDF_OPEN_WATCHDOG_MS = 45_000L
+
 /**
- * Loop 14: neutral skeleton placeholders shown while the PDF opens (file read,
- * worker boot, metadata/page-count/password initialization). Page-shaped cards
- * with a soft shimmer — never a spinner-only screen — and they disappear the
- * moment the real content, the password dialog or an error state takes over.
+ * Rounded loading indicator shown while the PDF opens (file read, worker start,
+ * page-count, password step). A round-capped arc spins over a soft track; once the
+ * reader reports transfer progress the percentage is shown too. It disappears as soon
+ * as the document, the password dialog or an error takes over.
  */
 @Composable
-private fun PdfOpeningSkeleton(modifier: Modifier = Modifier) {
-    val shimmer = rememberInfiniteTransition(label = "pdf-skeleton")
-    val alpha by shimmer.animateFloat(
-        initialValue = 0.35f,
-        targetValue = 0.85f,
+private fun PdfRoundedLoading(progress: Int, modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition(label = "pdf-rounded-loading")
+    val rotation by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 850, easing = LinearEasing),
+            animation = tween(durationMillis = 1100, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "pdf-loading-rotation"
+    )
+    val sweep by transition.animateFloat(
+        initialValue = 70f,
+        targetValue = 250f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 900, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "pdf-skeleton-alpha"
+        label = "pdf-loading-sweep"
     )
-    Column(
+    val accent = MaterialTheme.colorScheme.primary
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 22.dp, vertical = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+            .background(Color(0xFFF0F0F0)),
+        contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = "Preparing document…",
-            fontSize = 12.sp,
-            color = Color(0xFF6C6A64),
-            modifier = Modifier.padding(start = 2.dp)
-        )
-        repeat(3) { index ->
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    // Stable dimensions/aspect ratio: A4-ish portrait cards on the light
-                    // reader canvas, matching the real pages that replace them.
-                    .aspectRatio(0.72f)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color.White.copy(alpha = alpha))
-                    .border(
-                        width = 1.dp,
-                        color = Color(0xFF191919).copy(alpha = 0.10f),
-                        shape = RoundedCornerShape(10.dp)
-                    )
+                    .size(76.dp)
+                    .semantics { contentDescription = "Opening PDF" },
+                contentAlignment = Alignment.Center
             ) {
-                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Box(
-                        Modifier
-                            .fillMaxWidth(0.45f)
-                            .height(14.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(Color(0xFFD8D4CC).copy(alpha = alpha))
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val strokePx = 6.dp.toPx()
+                    val inset = strokePx / 2f
+                    val arcSize = Size(size.width - strokePx, size.height - strokePx)
+                    drawArc(
+                        color = accent.copy(alpha = 0.16f),
+                        startAngle = 0f,
+                        sweepAngle = 360f,
+                        useCenter = false,
+                        topLeft = Offset(inset, inset),
+                        size = arcSize,
+                        style = Stroke(width = strokePx, cap = StrokeCap.Round)
                     )
-                    repeat(4 - (index % 2)) {
-                        Box(
-                            Modifier
-                                .fillMaxWidth(if (it == 3) 0.6f else 1f)
-                                .height(8.dp)
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(Color(0xFFE4E0D8).copy(alpha = alpha))
-                        )
-                    }
+                    drawArc(
+                        color = accent,
+                        startAngle = rotation,
+                        sweepAngle = sweep,
+                        useCenter = false,
+                        topLeft = Offset(inset, inset),
+                        size = arcSize,
+                        style = Stroke(width = strokePx, cap = StrokeCap.Round)
+                    )
+                }
+                if (progress in 0..99) {
+                    Text(
+                        text = "$progress%",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF4A4843)
+                    )
                 }
             }
+            Spacer(modifier = Modifier.height(18.dp))
+            Text(
+                text = "Opening PDF…",
+                fontSize = 13.sp,
+                color = Color(0xFF6C6A64)
+            )
         }
     }
 }
 
 /**
- * Loop 14: right-edge draggable page scrubber. A slim rail with a grabbable
- * thumb sits over the page-margin area (never over body text), shows
- * `current / total` in a bubble while dragging, and maps the drag fraction to a
- * valid 1-based page via [PdfRotationPolicy.pageFromFraction]. Navigation fires
- * on release through [onJumpRequest] — the pages passed over are NOT eagerly
- * rendered, the shared gotoPdfPage pipeline simply scrolls to the target.
+ * Right-edge page scroller (Google-Drive style).
+ *
+ * - A pill handle on the right edge always shows the CURRENT page number and rides
+ *   the reading position from the first page (top) to the last page (bottom).
+ * - Dragging the handle scrolls the document LIVE (the reader jumps instantly, the
+ *   pages passed over are not rendered); a "Page N of M" bubble shows where you are.
+ *   Letting go leaves you on that page.
+ * - Only the handle itself captures touches, so normal scrolling anywhere else on the
+ *   right edge is never blocked. It dims when idle and lights up on scroll / touch.
  */
 @Composable
 private fun PdfPageScrubber(
-    currentPage: Int,
+    page: Int,
     pageCount: Int,
-    onJumpRequest: (Int) -> Unit,
+    position: Float,
+    onScrub: (Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var isDragging by remember { mutableStateOf(false) }
-    var dragFraction by remember { mutableFloatStateOf(0f) }
+    var dragPosition by remember { mutableFloatStateOf(0f) }
+    var recentlyActive by remember { mutableStateOf(true) }
+    var lastDispatchMs by remember { mutableLongStateOf(0L) }
+    val latestPosition by rememberUpdatedState(position)
+    val latestOnScrub by rememberUpdatedState(onScrub)
     val density = LocalDensity.current
-    val pageTotal = pageCount.coerceAtLeast(1)
-    val fraction = if (isDragging) dragFraction else
-        com.example.formats.pdf.PdfRotationPolicy.fractionForPage(currentPage, pageTotal)
-    val displayPage = if (isDragging) {
-        com.example.formats.pdf.PdfRotationPolicy.pageFromFraction(dragFraction, pageTotal)
-    } else currentPage.coerceIn(1, pageTotal)
+    val total = pageCount.coerceAtLeast(1)
+
+    // Light up on any reading-position change, fade after a short idle.
+    LaunchedEffect(position, page, isDragging) {
+        recentlyActive = true
+        if (!isDragging) {
+            delay(1800)
+            recentlyActive = false
+        }
+    }
+    val handleAlpha by animateFloatAsState(
+        targetValue = if (isDragging || recentlyActive) 1f else 0.5f,
+        animationSpec = tween(220),
+        label = "pdf-scroller-alpha"
+    )
+    val shownPosition = if (isDragging) dragPosition else position.coerceIn(0f, 1f)
 
     BoxWithConstraints(
         modifier = modifier
-            .fillMaxHeight()
-            .width(220.dp)
-            .semantics {
-                contentDescription = "PDF page scroller. Page $displayPage of $pageTotal."
-            },
+            .width(120.dp)
+            .semantics { contentDescription = "PDF page scroller. Page $page of $total." },
         contentAlignment = Alignment.TopEnd
     ) {
-        val handleHeight = 52.dp
-        val usableHeight = (maxHeight - handleHeight).coerceAtLeast(0.dp)
-        val handleY = usableHeight * fraction.coerceIn(0f, 1f)
+        val handleHeight = 36.dp
+        val travelPx = with(density) { (maxHeight - handleHeight).coerceAtLeast(1.dp).toPx() }
+        val handleOffsetY = (travelPx * shownPosition).toInt()
 
-        // Floating Page Bubble shown prominently to the left of the pill handle when touching/dragging
+        // "Page N of M" bubble beside the handle while dragging.
         AnimatedVisibility(
             visible = isDragging,
-            enter = fadeIn(tween(140)) + slideInVertically(tween(140)) { it / 2 },
-            exit = fadeOut(tween(140)),
+            enter = fadeIn(tween(120)),
+            exit = fadeOut(tween(160)),
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .offset(y = handleY - 6.dp)
-                .padding(end = 46.dp)
+                .offset { IntOffset(0, handleOffsetY) }
+                .padding(end = 58.dp)
+                .height(handleHeight)
         ) {
             Surface(
-                shape = RoundedCornerShape(22.dp),
-                color = MaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.94f),
-                shadowElevation = 8.dp,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.95f),
+                shadowElevation = 6.dp
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    modifier = Modifier
+                        .padding(horizontal = 14.dp)
+                        .fillMaxHeight(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text(
-                        text = "Page $displayPage",
+                        text = "Page $page",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.inverseOnSurface
                     )
                     Text(
-                        text = "of $pageTotal",
+                        text = "of $total",
                         fontSize = 12.sp,
-                        fontWeight = FontWeight.Normal,
                         color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.75f)
                     )
                 }
             }
         }
 
-        // Floating Pill Handle on the right edge
+        // The handle: page number pill, the only touch target of the scroller.
         Surface(
-            shape = RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp),
-            color = if (isDragging) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.50f)),
-            shadowElevation = if (isDragging) 6.dp else 2.dp,
+            shape = RoundedCornerShape(topStart = 18.dp, bottomStart = 18.dp),
+            color = if (isDragging) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)),
+            shadowElevation = if (isDragging) 6.dp else 3.dp,
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .offset(y = handleY)
-                .width(if (isDragging) 36.dp else 28.dp)
+                .offset { IntOffset(0, handleOffsetY) }
+                .alpha(handleAlpha)
+                .width(54.dp)
                 .height(handleHeight)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(3.dp)
-                ) {
-                    repeat(3) {
-                        Box(
-                            modifier = Modifier
-                                .width(if (isDragging) 14.dp else 10.dp)
-                                .height(2.dp)
-                                .background(
-                                    if (isDragging) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                    RoundedCornerShape(1.dp)
-                                )
-                        )
-                    }
-                }
-            }
-        }
-
-        // Touch capture area along the edge
-        Box(
-            modifier = Modifier
-                .fillMaxHeight()
-                .width(56.dp)
-                .align(Alignment.TopEnd)
-                .pointerInput(pageTotal, maxHeight) {
-                    detectDragGestures(
-                        onDragStart = { offset ->
+                .pointerInput(total) {
+                    detectVerticalDragGestures(
+                        onDragStart = {
+                            dragPosition = latestPosition.coerceIn(0f, 1f)
                             isDragging = true
-                            val available = (size.height - with(density) { handleHeight.toPx() }).coerceAtLeast(1f)
-                            dragFraction = ((offset.y - with(density) { handleHeight.toPx() / 2f }) / available)
-                                .coerceIn(0f, 1f)
                         },
-                        onDrag = { change, _ ->
+                        onVerticalDrag = { change, dragAmount ->
                             change.consume()
-                            val available = (size.height - with(density) { handleHeight.toPx() }).coerceAtLeast(1f)
-                            dragFraction = ((change.position.y - with(density) { handleHeight.toPx() / 2f }) / available)
-                                .coerceIn(0f, 1f)
+                            dragPosition = (dragPosition + dragAmount / travelPx).coerceIn(0f, 1f)
+                            val now = android.os.SystemClock.uptimeMillis()
+                            if (now - lastDispatchMs >= 32L) {
+                                lastDispatchMs = now
+                                latestOnScrub(dragPosition)
+                            }
                         },
                         onDragEnd = {
-                            val targetPage = com.example.formats.pdf.PdfRotationPolicy
-                                .pageFromFraction(dragFraction, pageTotal)
+                            latestOnScrub(dragPosition)
                             isDragging = false
-                            onJumpRequest(targetPage)
                         },
                         onDragCancel = { isDragging = false }
                     )
                 }
-        )
+        ) {
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                Text(
+                    text = page.toString(),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    color = if (isDragging) MaterialTheme.colorScheme.onPrimary
+                    else MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
     }
 }
 
@@ -645,6 +710,8 @@ private class PdfWebAppInterface(
     private val onReady: () -> Unit,
     private val onDocumentLoaded: (Int) -> Unit,
     private val onPageChanged: (Int, Int) -> Unit,
+    private val onScrollProgress: (Int, Int, Float) -> Unit,
+    private val onLoadProgress: (Int) -> Unit,
     private val onSearchSnapshot: (PdfSearchSnapshot, Boolean) -> Unit,
     private val onSearchError: (String) -> Unit,
     private val onPasswordRequired: (Int) -> Unit,
@@ -668,6 +735,16 @@ private class PdfWebAppInterface(
     @android.webkit.JavascriptInterface
     fun onPdfPageChanged(page: Int, pageCount: Int) {
         mainHandler.post { onPageChanged(page, pageCount) }
+    }
+
+    @android.webkit.JavascriptInterface
+    fun onPdfScrollProgress(page: Int, pageCount: Int, position: Double) {
+        mainHandler.post { onScrollProgress(page, pageCount, position.toFloat()) }
+    }
+
+    @android.webkit.JavascriptInterface
+    fun onPdfLoadProgress(percent: Int) {
+        mainHandler.post { onLoadProgress(percent) }
     }
 
     @android.webkit.JavascriptInterface

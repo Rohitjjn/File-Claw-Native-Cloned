@@ -151,35 +151,57 @@
             font-size: 14px;
         }
 
-        /* Dedicated Print Stylesheet */
+        /* Browser-level pinch is handled by the page's own gesture engine. */
+        #document-scroller { touch-action: pan-x pan-y; }
+
+        /* Dedicated Print Stylesheet (used by ?print=1 and any real print).
+           Every Word section becomes exactly one (or more, if it is taller than a
+           page) real page: vector text, original layout, light colours. */
+        @page { size: A4; margin: 0; }
         @media print {
             html, body {
                 overflow: visible !important;
                 height: auto !important;
                 background: #ffffff !important;
                 color: #000000 !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
             }
+            #loading { display: none !important; }
             #document-scroller {
                 overflow: visible !important;
                 height: auto !important;
                 padding: 0 !important;
+                position: static !important;
             }
             #output {
                 zoom: 1 !important;
                 transform: none !important;
-                width: 100% !important;
-                max-width: 100% !important;
+                width: auto !important;
+                min-width: 0 !important;
+                max-width: none !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+            .docx-wrapper {
+                display: block !important;
+                background: #ffffff !important;
+                padding: 0 !important;
                 margin: 0 !important;
             }
-            .docx, section.docx {
+            .docx, section.docx, .docx-wrapper > section {
                 box-shadow: none !important;
                 border: none !important;
                 border-radius: 0 !important;
                 margin: 0 auto !important;
+                min-height: 0 !important;
+                content-visibility: visible !important;
+                background-color: #ffffff !important;
+                color: #000000;
                 page-break-after: always;
                 break-after: page;
             }
-            .docx:last-child, section.docx:last-child {
+            .docx:last-child, section.docx:last-child, .docx-wrapper > section:last-child {
                 page-break-after: auto;
                 break-after: auto;
             }
@@ -435,6 +457,33 @@
             return bytes.buffer;
         }
 
+        // Fallback when fetch('/docx-src/...') is unavailable: the app hands the file
+        // over in ~1.5 MB base64 chunks (never one giant string).
+        function readBridgedDocument() {
+            const bridge = window.Android;
+            try {
+                if (bridge && bridge.getDocxSize && bridge.getDocxChunk) {
+                    const size = Number(bridge.getDocxSize());
+                    if (!(size > 0)) return null;
+                    const bytes = new Uint8Array(size);
+                    let offset = 0;
+                    for (let index = 0; offset < size; index++) {
+                        const chunk = bridge.getDocxChunk(index);
+                        if (!chunk) break;
+                        const part = new Uint8Array(base64ToBuffer(chunk));
+                        bytes.set(part, offset);
+                        offset += part.length;
+                    }
+                    return offset === size ? bytes.buffer : null;
+                }
+                if (bridge && bridge.getDocxBase64) {
+                    const whole = bridge.getDocxBase64();
+                    if (whole && whole.trim().length > 0) return base64ToBuffer(whole);
+                }
+            } catch (e) { console.warn('bridge read failed', e); }
+            return null;
+        }
+
         function fetchDocumentBytes() {
             return fetch('/docx-src/document.docx', { credentials: 'omit' }).then(function (response) {
                 if (!response.ok) throw new Error('HTTP ' + response.status);
@@ -445,10 +494,53 @@
         function showLoadError(message) {
             const loadingEl = document.getElementById("loading");
             if (loadingEl) loadingEl.style.display = 'none';
-            if (container) container.innerHTML = '<div class="error-banner">' + message + '</div>';
+            if (container) {
+                const banner = document.createElement('div');
+                banner.className = 'error-banner';
+                banner.textContent = String(message);
+                container.replaceChildren(banner);
+            }
             if (window.Android && window.Android.onDocumentError) {
                 window.Android.onDocumentError(message);
             }
+        }
+
+        // Large documents: let the browser skip layout/paint of pages far from the
+        // viewport. The measured height is kept as the intrinsic size so scrollbar
+        // length, page jumps and the page counter stay exact. Text stays in the DOM, so
+        // in-document search is unaffected.
+        function optimizeLargeDocument() {
+            const pages = Array.from(document.querySelectorAll('#output .docx'));
+            if (pages.length < 20 || !('contentVisibility' in document.documentElement.style)) return;
+            const heights = pages.map(function (page) { return page.offsetHeight; });
+            pages.forEach(function (page, index) {
+                if (heights[index] > 0) {
+                    page.style.containIntrinsicSize = 'auto ' + heights[index] + 'px';
+                    page.style.contentVisibility = 'auto';
+                }
+            });
+        }
+
+        // Print mode: wait for fonts + images, then fit every section to the printable
+        // A4 width so Letter/odd page sizes do not overflow into blank spill pages.
+        function preparePrintLayout() {
+            const A4_WIDTH_PX = 793;
+            const waits = [];
+            if (document.fonts && document.fonts.ready) waits.push(document.fonts.ready);
+            document.querySelectorAll('#output img').forEach(function (img) {
+                if (img.decode) waits.push(img.decode().catch(function () {}));
+            });
+            const settle = Promise.all(waits).catch(function () {});
+            const timeout = new Promise(function (resolve) { setTimeout(resolve, 6000); });
+            return Promise.race([settle, timeout]).then(function () {
+                document.querySelectorAll('#output section.docx').forEach(function (section) {
+                    const width = section.offsetWidth;
+                    if (width > A4_WIDTH_PX + 2) section.style.zoom = String(A4_WIDTH_PX / width);
+                });
+                return new Promise(function (resolve) {
+                    requestAnimationFrame(function () { requestAnimationFrame(resolve); });
+                });
+            });
         }
 
         function renderDocument(arrayBuffer) {
@@ -492,12 +584,17 @@
                     setDarkMode(true);
                 }
                 observePages();
+                if (!isPrintMode) optimizeLargeDocument();
 
                 if (window.Android && window.Android.onDocumentLoaded) {
                     window.Android.onDocumentLoaded(totalPages);
                 }
-                if (isPrintMode && window.Android && window.Android.onPrintReady) {
-                    window.Android.onPrintReady();
+                if (isPrintMode) {
+                    preparePrintLayout().then(function () {
+                        if (window.Android && window.Android.onPrintReady) {
+                            window.Android.onPrintReady();
+                        }
+                    });
                 }
             }).catch(function(err) {
                 staging.remove();
@@ -519,15 +616,12 @@
                     renderDocument(buffer);
                 }).catch(function (fetchError) {
                     console.warn("docx-src fetch failed, falling back to bridge", fetchError);
-                    let bridged = null;
-                    if (window.Android && window.Android.getDocxBase64) {
-                        try { bridged = window.Android.getDocxBase64(); } catch (e) {}
-                    }
-                    if (!bridged || bridged.trim().length === 0) {
-                        showLoadError("Document data is empty or unavailable.");
+                    const buffer = readBridgedDocument();
+                    if (!buffer) {
+                        showLoadError("Document data is empty or unavailable (" + (fetchError && fetchError.message ? fetchError.message : 'read failed') + ").");
                         return;
                     }
-                    renderDocument(base64ToBuffer(bridged));
+                    renderDocument(buffer);
                 });
                 return;
             }

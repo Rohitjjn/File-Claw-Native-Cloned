@@ -66,28 +66,25 @@
       outline: 2px solid rgba(204, 120, 92, .95);
       z-index: 2;
     }
-    /* Rounded page skeleton with soft shimmer */
-    .pdf-page.skeleton {
-      border-radius: 12px;
-    }
-    .pdf-page.skeleton::after {
+    /* Rounded loading indicator for a page that has no bitmap yet (replaces the old
+       grey shimmer skeleton). A round-capped arc spins in the middle of the page. */
+    .pdf-page.skeleton::before {
       content: '';
       position: absolute;
-      inset: 0;
-      border-radius: 12px;
-      background: linear-gradient(100deg,
-        rgba(25, 25, 25, 0) 30%,
-        rgba(25, 25, 25, 0.08) 50%,
-        rgba(25, 25, 25, 0) 70%);
-      animation: pdf-skeleton-pulse 1.4s ease-in-out infinite;
+      left: 50%;
+      top: min(50%, 220px);
+      width: 44px;
+      height: 44px;
+      margin: -22px 0 0 -22px;
+      background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 44 44'><circle cx='22' cy='22' r='17' fill='none' stroke='%23cc785c' stroke-opacity='.18' stroke-width='5'/><circle cx='22' cy='22' r='17' fill='none' stroke='%23cc785c' stroke-width='5' stroke-linecap='round' stroke-dasharray='30 77'/></svg>") center / contain no-repeat;
+      animation: pdf-round-spin .9s linear infinite;
       pointer-events: none;
     }
-    @keyframes pdf-skeleton-pulse {
-      0% { transform: translateX(-60%); }
-      100% { transform: translateX(60%); }
+    @keyframes pdf-round-spin {
+      to { transform: rotate(360deg); }
     }
     @media (prefers-reduced-motion: reduce) {
-      .pdf-page.skeleton::after { animation: none; }
+      .pdf-page.skeleton::before { animation-duration: 2.4s; }
     }
     /* Loop 12 (Bug C): per-page render failure recovery. A failed page used to stay
        permanently blank until the user scrolled far enough away and back. */
@@ -120,13 +117,30 @@
 <body>
   <main id="pdf-document" aria-label="PDF document"></main>
   <script>
+    // Boot guard. A module that fails to download or parse (very old WebView, missing
+    // asset) never reaches its own code, so the page itself must report it - otherwise
+    // the app would sit on its loading indicator forever.
+    window.__pdfBooted = false;
+    window.__pdfBootError = function (reason) {
+      if (window.__pdfBooted || window.__pdfBootReported) return;
+      window.__pdfBootReported = true;
+      try {
+        if (window.Android && window.Android.onPdfError) {
+          window.Android.onPdfError('The PDF engine could not start (' + String(reason || 'unknown') + ').');
+        }
+      } catch (_) {}
+    };
     window.addEventListener('error', function (event) {
-      if (window.Android && window.Android.onPdfError && event && event.message) {
-        window.Android.onPdfError(String(event.message));
+      if (!event) return;
+      if (!window.__pdfBooted) { window.__pdfBootError(event.message || 'script error'); return; }
+      if (window.Android && window.Android.onPdfError && event.message && event.message !== 'ResizeObserver loop limit exceeded') {
+        console.warn('PDF page error: ' + event.message);
       }
     });
+    setTimeout(function () { window.__pdfBootError('start-up timeout'); }, 10000);
   </script>
-  <script type="module">
+  <script type="module" onerror="window.__pdfBootError('module load failed')">
+    import './pdf.compat.mjs';
     import * as pdfjsLib from './pdf.min.mjs';
 
     const assetBase = '/assets/pdfjs/';
@@ -156,7 +170,8 @@
     const maxCanvasDimensionPx = 8192;
     const minRenderRatio = 0.05;
     let renderScaleHint = 1;
-    pdfjsLib.GlobalWorkerOptions.workerSrc = assetBase + 'pdf.worker.min.mjs';
+    pdfjsLib.GlobalWorkerOptions.workerSrc = assetBase + 'pdf.worker.shim.mjs';
+    window.__pdfBooted = true;
 
     let pdfDocument = null;
     let loadingPromise = null;
@@ -649,24 +664,97 @@
       }
     }
 
-    function reportVisiblePage(entries) {
-      const visible = entries.filter(function (entry) { return entry.isIntersecting; });
-      if (!visible.length) return;
-      visible.sort(function (a, b) { return b.intersectionRatio - a.intersectionRatio; });
-      const viewportCenter = (window.innerHeight || 0) / 2;
-      visible.sort(function (a, b) {
-        const rectA = a.boundingClientRect;
-        const rectB = b.boundingClientRect;
-        const distanceA = Math.abs((rectA.top + rectA.bottom) / 2 - viewportCenter);
-        const distanceB = Math.abs((rectB.top + rectB.bottom) / 2 - viewportCenter);
-        return distanceA - distanceB;
-      });
-      const record = pageRecords[Number(visible[0].target.dataset.pageNumber) - 1];
-      if (record && currentPage !== record.pageNumber) {
-        currentPage = record.pageNumber;
-        bridgeCall('onPdfPageChanged', currentPage, pageRecords.length);
+    // ---------------------------------------------------------------------------
+    // Page scroller support. Position is measured in PAGE space, so the Android
+    // scrubber handle moves 0..1 from the first page to the last page exactly, even
+    // when pages have different heights, and a drag maps back to the same spot.
+    // ---------------------------------------------------------------------------
+    function docScroller() {
+      return document.scrollingElement || document.documentElement || document.body;
+    }
+
+    function clamp01(value) {
+      return Math.min(1, Math.max(0, Number(value) || 0));
+    }
+
+    // Index of the page whose top edge is the last one at or above document-y `y`.
+    function pageIndexAtY(y) {
+      let low = 0;
+      let high = pageRecords.length - 1;
+      let answer = 0;
+      while (low <= high) {
+        const mid = (low + high) >> 1;
+        if (pageRecords[mid].element.offsetTop <= y) { answer = mid; low = mid + 1; }
+        else { high = mid - 1; }
+      }
+      return answer;
+    }
+
+    // index + fraction of that page for a given scrollTop (page space).
+    function pageSpaceAt(scrollTop) {
+      const index = pageIndexAtY(scrollTop);
+      const element = pageRecords[index].element;
+      const within = clamp01((scrollTop - element.offsetTop) / Math.max(1, element.offsetHeight));
+      return index + within;
+    }
+
+    function maxScrollTop() {
+      const scroller = docScroller();
+      return Math.max(0, scroller.scrollHeight - (window.innerHeight || scroller.clientHeight || 0));
+    }
+
+    function computeScrollState() {
+      const total = pageRecords.length;
+      const scroller = docScroller();
+      const max = maxScrollTop();
+      const top = Math.min(max, Math.max(0, scroller.scrollTop));
+      let page;
+      if (top <= 1) page = 1;
+      else if (max > 1 && top >= max - 2) page = total;
+      else page = pageIndexAtY(top + (window.innerHeight || 0) * 0.35) + 1;
+      const endSpace = pageSpaceAt(max);
+      const position = endSpace > 0 ? clamp01(pageSpaceAt(top) / endSpace) : 0;
+      return { page: Math.max(1, Math.min(total, page)), total: total, position: position };
+    }
+
+    let lastReportedPosition = -1;
+    let scrollReportScheduled = false;
+    function reportScrollState() {
+      scrollReportScheduled = false;
+      if (!pageRecords.length) return;
+      const state = computeScrollState();
+      const pageChanged = state.page !== currentPage;
+      if (pageChanged) {
+        currentPage = state.page;
+        bridgeCall('onPdfPageChanged', state.page, state.total);
+      }
+      if (pageChanged || Math.abs(state.position - lastReportedPosition) > 0.0015) {
+        lastReportedPosition = state.position;
+        bridgeCall('onPdfScrollProgress', state.page, state.total, state.position);
       }
     }
+
+    function scheduleScrollReport() {
+      if (scrollReportScheduled) return;
+      scrollReportScheduled = true;
+      requestAnimationFrame(reportScrollState);
+    }
+
+    // Instant, un-animated jump used while the scroller handle is dragged.
+    function scrubToPosition(position) {
+      if (!pageRecords.length) return;
+      const scroller = docScroller();
+      const max = maxScrollTop();
+      const p = clamp01(position);
+      if (p >= 0.999) { scroller.scrollTop = max; return; }
+      if (p <= 0.001) { scroller.scrollTop = 0; return; }
+      const target = p * pageSpaceAt(max);
+      const index = Math.min(pageRecords.length - 1, Math.floor(target));
+      const element = pageRecords[index].element;
+      scroller.scrollTop = Math.min(max, element.offsetTop + (target - index) * element.offsetHeight);
+    }
+
+    window.addEventListener('scroll', scheduleScrollReport, { passive: true });
 
     // Placeholder records have no page proxy yet; re-derive their estimated size so
     // zoom and rotation changes keep the scroll layout roughly correct before first
@@ -755,7 +843,6 @@
       if (pageObserver) pageObserver.disconnect();
       if ('IntersectionObserver' in window) {
         pageObserver = new IntersectionObserver(function (entries) {
-          reportVisiblePage(entries);
           entries.forEach(function (entry) {
             const record = pageRecords[Number(entry.target.dataset.pageNumber) - 1];
             if (!record) return;
@@ -780,36 +867,142 @@
       bridgeCall('onPdfDocumentLoaded', documentProxy.numPages);
       if (pageRecords.length) {
         currentPage = 1;
+        lastReportedPosition = -1;
         bridgeCall('onPdfPageChanged', currentPage, pageRecords.length);
+        bridgeCall('onPdfScrollProgress', 1, pageRecords.length, 0);
       }
+    }
+
+    // ---------------------------------------------------------------------------
+    // Opening the document. Three strategies, tried in order, each guarded by a stall
+    // timer so a silently broken path (worker not reachable, range responses ignored)
+    // falls through instead of leaving the user on an endless loading indicator:
+    //   1. real worker + HTTP range requests (fast; only the pages actually read are
+    //      transferred, which is what makes 100+ MB files open instantly);
+    //   2. main-thread "fake worker" + range requests (no Worker / worker fetch needed);
+    //   3. whole-file fetch in the page (last resort; memory heavy).
+    // ---------------------------------------------------------------------------
+    const stallLimitMs = 9000;
+    const openGate = { timer: null, paused: false, rearm: null };
+    let workerInMainThread = false;
+    let lastProgressPercent = -1;
+
+    function baseDocumentOptions() {
+      return {
+        cMapUrl: assetBase + 'cmaps/',
+        cMapPacked: true,
+        standardFontDataUrl: assetBase + 'standard_fonts/',
+        isEvalSupported: false,
+        enableXfa: false,
+        maxImageSize: 16 * 1024 * 1024,
+        verbosity: 0
+      };
+    }
+
+    function reportLoadProgress(loaded, total) {
+      if (!(total > 0)) return;
+      const percent = Math.max(0, Math.min(99, Math.round((loaded / total) * 100)));
+      if (percent !== lastProgressPercent) {
+        lastProgressPercent = percent;
+        bridgeCall('onPdfLoadProgress', percent);
+      }
+    }
+
+    function awaitDocument(task) {
+      return new Promise(function (resolve, reject) {
+        openGate.paused = false;
+        function arm() {
+          clearTimeout(openGate.timer);
+          if (openGate.paused) return;
+          openGate.timer = setTimeout(function () { reject(new Error('stalled')); }, stallLimitMs);
+        }
+        openGate.rearm = arm;
+        task.onPassword = function (updatePassword, reason) {
+          // A password prompt is user time, not a stall.
+          openGate.paused = true;
+          clearTimeout(openGate.timer);
+          passwordUpdater = updatePassword;
+          bridgeCall('onPdfPasswordRequired', Number(reason) || 1);
+        };
+        task.onProgress = function (progress) {
+          if (progress) reportLoadProgress(progress.loaded, progress.total);
+          arm();
+        };
+        arm();
+        task.promise.then(function (documentProxy) {
+          clearTimeout(openGate.timer);
+          resolve(documentProxy);
+        }, function (error) {
+          clearTimeout(openGate.timer);
+          reject(error);
+        });
+      });
+    }
+
+    async function useMainThreadWorker() {
+      if (workerInMainThread) return;
+      // Importing the worker bundle into the page makes PDF.js run it on the main
+      // thread (globalThis.pdfjsWorker) instead of spawning a Worker.
+      await import('./pdf.worker.min.mjs');
+      workerInMainThread = true;
+    }
+
+    function friendlyOpenError(error) {
+      const name = error && error.name;
+      if (name === 'InvalidPDFException') return 'This file is damaged or is not a valid PDF.';
+      if (name === 'MissingPDFException') return 'The PDF file could not be found.';
+      const text = String(error && (error.message || error) || '');
+      if (text === 'stalled') return 'The PDF took too long to open. Try again, or open it with another app.';
+      return text || 'Could not open this PDF';
     }
 
     async function loadPdf() {
       if (pdfDocument) return pdfDocument;
       if (loadingPromise) return loadingPromise;
 
-      const loadingTask = pdfjsLib.getDocument({
-        url: pdfUrl,
-        cMapUrl: assetBase + 'cmaps/',
-        cMapPacked: true,
-        standardFontDataUrl: assetBase + 'standard_fonts/',
-        isEvalSupported: false,
-        useWorkerFetch: true,
-        disableRange: false,
-        disableStream: true,
-        disableAutoFetch: true
-      });
-      loadingTask.onPassword = function (updatePassword, reason) {
-        passwordUpdater = updatePassword;
-        bridgeCall('onPdfPasswordRequired', Number(reason) || 1);
-      };
-      loadingPromise = loadingTask.promise.then(async function (documentProxy) {
-        pdfDocument = documentProxy;
-        await prepareDocument(documentProxy);
-        return documentProxy;
-      }).catch(function (error) {
+      loadingPromise = (async function () {
+        const strategies = [
+          { label: 'worker+range', mainThread: false, wholeFile: false },
+          { label: 'main-thread+range', mainThread: true, wholeFile: false },
+          { label: 'main-thread+whole-file', mainThread: true, wholeFile: true }
+        ];
+        let lastError = null;
+        for (let index = 0; index < strategies.length; index++) {
+          const strategy = strategies[index];
+          let task = null;
+          try {
+            lastProgressPercent = -1;
+            if (strategy.mainThread) await useMainThreadWorker();
+            const options = baseDocumentOptions();
+            options.useWorkerFetch = !strategy.mainThread;
+            if (strategy.wholeFile) {
+              const response = await fetch(pdfUrl, { credentials: 'omit' });
+              if (!response.ok) throw new Error('HTTP ' + response.status);
+              options.data = new Uint8Array(await response.arrayBuffer());
+            } else {
+              options.url = pdfUrl;
+              options.disableRange = false;
+              // Streaming would make PDF.js pull the whole file before page 1.
+              options.disableStream = true;
+              options.disableAutoFetch = true;
+              options.rangeChunkSize = 512 * 1024;
+            }
+            task = pdfjsLib.getDocument(options);
+            const documentProxy = await awaitDocument(task);
+            pdfDocument = documentProxy;
+            await prepareDocument(documentProxy);
+            return documentProxy;
+          } catch (error) {
+            lastError = error;
+            console.warn('PDF open strategy failed: ' + strategy.label, error);
+            try { if (task) task.destroy(); } catch (_) {}
+            pdfDocument = null;
+          }
+        }
+        throw lastError || new Error('Could not open this PDF');
+      })().catch(function (error) {
         loadingPromise = null;
-        bridgeCall('onPdfError', String(error && (error.message || error) || 'Could not open this PDF'));
+        bridgeCall('onPdfError', friendlyOpenError(error));
         throw error;
       });
       return loadingPromise;
@@ -909,9 +1102,13 @@
     }
 
     function goToPdfPage(pageNumber) {
-      const record = pageRecords[Math.max(0, Math.min(pageRecords.length - 1, Number(pageNumber) - 1))];
+      const index = Math.max(0, Math.min(pageRecords.length - 1, Number(pageNumber) - 1));
+      const record = pageRecords[index];
       if (record) {
-        record.element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // Smooth scrolling across hundreds of pages would flip through every page in
+        // between (rendering each); long jumps are instant, short ones animate.
+        const distance = Math.abs(index - Math.max(0, (currentPage || 1) - 1));
+        record.element.scrollIntoView({ behavior: distance > 3 ? 'auto' : 'smooth', block: 'start' });
         renderRecord(record);
       }
     }
@@ -919,21 +1116,33 @@
     // Loop 14: PDF night mode was removed — the bridge entry point is gone. PDFs
     // always display in light mode.
 
+    // Re-derives every page's size from the current width / zoom / rotation. Existing
+    // bitmaps stay on screen (stretched) until the re-rendered ones replace them, so a
+    // rotation or resize never flashes blank pages.
+    function relayoutPages() {
+      if (!pageRecords.length) return;
+      const anchor = captureScrollAnchor();
+      pageRecords.forEach(function (record) {
+        if (record.page) updateRecordGeometry(record, true);
+        else updatePlaceholderGeometry(record);
+      });
+      restoreScrollAnchor(anchor);
+      if (pageObserver) {
+        pageRecords.forEach(function (record) { pageObserver.unobserve(record.element); });
+        pageRecords.forEach(function (record) { pageObserver.observe(record.element); });
+      } else {
+        pageRecords.slice(0, 4).forEach(renderRecord);
+      }
+      scheduleScrollReport();
+    }
+
     function setPdfZoom(factor) {
       // Loop 14: the logical zoom cap follows the viewport's maximum-scale (8x).
       // Memory stays bounded: renderPixelRatio() clamps every canvas by the total
       // RGBA budget, the ratio cap and the 8192px dimension ceiling regardless of
       // how far the user pinches.
       currentZoom = Math.max(.25, Math.min(8, Number(factor) || 1));
-      const anchor = captureScrollAnchor();
-      pageRecords.forEach(function (record) {
-        if (record.page) updateRecordGeometry(record, false);
-        else updatePlaceholderGeometry(record);
-        if (pageObserver) pageObserver.unobserve(record.element);
-      });
-      if (pageObserver) pageRecords.forEach(function (record) { pageObserver.observe(record.element); });
-      else pageRecords.slice(0, 4).forEach(renderRecord);
-      restoreScrollAnchor(anchor);
+      relayoutPages();
     }
 
     // ---------------------------------------------------------------------------
@@ -949,21 +1158,22 @@
     // The authenticated document session is untouched: no reload, no password prompt.
     // ---------------------------------------------------------------------------
     function captureScrollAnchor() {
-      const scroller = document.scrollingElement || document.documentElement || document.body;
+      const scroller = docScroller();
       if (!scroller || !pageRecords.length) return { page: Math.max(1, currentPage), fraction: 0, top: 0 };
       const scrollTop = scroller.scrollTop;
-      let targetRecord = pageRecords[0];
-      for (const rec of pageRecords) {
-        if (rec.element && (rec.element.offsetTop + rec.element.offsetHeight) > scrollTop) {
-          targetRecord = rec;
-          break;
-        }
+      // The page at the TOP of the viewport (not the one nearest the centre) so a
+      // relayout never makes the reader jump to a different page.
+      let index = pageIndexAtY(scrollTop);
+      let record = pageRecords[index];
+      if (record.element.offsetTop + record.element.offsetHeight <= scrollTop && index + 1 < pageRecords.length) {
+        index++;
+        record = pageRecords[index];
       }
-      const elementTop = targetRecord.element.offsetTop;
-      const elementHeight = Math.max(1, targetRecord.element.offsetHeight);
-      const within = Math.max(0, scrollTop - elementTop);
+      const elementTop = record.element.offsetTop;
+      const elementHeight = Math.max(1, record.element.offsetHeight);
+      const within = scrollTop - elementTop;
       return {
-        page: targetRecord.pageNumber,
+        page: record.pageNumber,
         fraction: Math.min(1, Math.max(0, within / elementHeight)),
         top: scrollTop
       };
@@ -985,36 +1195,24 @@
     function setPageRotation(degrees) {
       const next = ((Math.round(Number(degrees) || 0) % 360) + 360) % 360;
       if (next === pageRotation || next % 90 !== 0 || !pdfDocument) return;
-      const anchor = captureScrollAnchor();
       pageRotation = next;
-      pageRecords.forEach(function (record) {
-        if (record.page) {
-          updateRecordGeometry(record, true); // keep the old bitmap visible while re-rendering
-        } else {
-          updatePlaceholderGeometry(record);
-        }
-      });
-      restoreScrollAnchor(anchor);
-      // Re-render everything that currently holds a bitmap. updateRecordGeometry
-      // already set rendered=false for pages whose size changed (every non-square
-      // page); square pages need the explicit kick below, and re-observing makes
-      // the IntersectionObserver re-report visible pages for the render pass.
+      relayoutPages();
+      // Square pages keep their size, so updateRecordGeometry() skips them; re-render
+      // every page that holds a bitmap so the new orientation shows.
       pageRecords.forEach(function (record) {
         if (record.canvas && record.canvas.width > 0 && !record.renderTask) {
           record.rendered = false;
           renderRecord(record);
         }
       });
-      if (pageObserver) {
-        pageRecords.forEach(function (record) { pageObserver.unobserve(record.element); });
-        pageRecords.forEach(function (record) { pageObserver.observe(record.element); });
-      }
     }
 
     function submitPdfPassword(password) {
       if (passwordUpdater) {
         const updatePassword = passwordUpdater;
         passwordUpdater = null;
+        openGate.paused = false;
+        if (openGate.rearm) openGate.rearm();
         updatePassword(String(password || ''));
       }
     }
@@ -1043,13 +1241,14 @@
       clearTimeout(resizeTimer);
       // Debounced: resizing the WebView (focus mode, rotation) used to cancel and
       // re-render every page per frame, flashing blank canvases mid-transition.
-      resizeTimer = setTimeout(function () { setPdfZoom(currentZoom); }, 180);
+      resizeTimer = setTimeout(relayoutPages, 120);
     });
 
     window.searchPdf = searchPdf;
     window.showPdfSearchMatch = showPdfSearchMatch;
     window.gotoPdfPage = goToPdfPage;
     window.setPdfZoom = setPdfZoom;
+    window.scrubToPosition = scrubToPosition;
     window.setPageRotation = setPageRotation;
     window.setPdfRenderScale = setPdfRenderScale;
     window.setPdfQualityBudget = setPdfQualityBudget;

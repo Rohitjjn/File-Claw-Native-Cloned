@@ -25,7 +25,6 @@ import com.example.platform.webview.MimeAwareAssetsPathHandler
 
 @Composable
 fun DocxPreviewWebView(
-    base64Docx: String,
     fileEntity: RecentFileEntity,
     isNightMode: Boolean,
     viewModel: MainViewModel,
@@ -38,31 +37,25 @@ fun DocxPreviewWebView(
     searchTriggerPrev: Int = 0,
     onSearchResultCount: (Int, Int, Boolean) -> Unit = { _, _, _ -> },
     zoomFactor: Float = 1.0f,
-    // Loop 12 (Bug A): true while a pinch gesture is physically in progress. While it
-    // is set, zoom updates go to the cheap compositor-only preview path instead of
-    // re-laying-out the whole document per frame; the settle transition commits once.
-    pinchActive: Boolean = false,
     onWebViewCreated: (android.webkit.WebView?) -> Unit = {},
     onDocumentReady: () -> Unit = {},
     onSingleTap: () -> Unit = {},
     onZoomChanged: (Float) -> Unit = {},
-    onPinchZoom: (Float) -> Unit = {},
-    onPinchSettled: () -> Unit = {},
     onDoubleTap: () -> Unit = {},
     onRendererFallback: (Boolean) -> Unit = {}
 ) {
-    var isWebViewLoading by remember(base64Docx) { mutableStateOf(true) }
-    var webViewRef by remember(base64Docx) { mutableStateOf<android.webkit.WebView?>(null) }
-    var pureKotlinFallback by remember(base64Docx) { mutableStateOf<com.example.formats.docx.DocxExtractor.ExtractedDocx?>(null) }
+    var isWebViewLoading by remember(fileEntity.path) { mutableStateOf(true) }
+    var webViewRef by remember(fileEntity.path) { mutableStateOf<android.webkit.WebView?>(null) }
+    var pureKotlinFallback by remember(fileEntity.path) { mutableStateOf<com.example.formats.docx.DocxExtractor.ExtractedDocx?>(null) }
     // Loop 14: the plain-text view is an honest RECOVERY state, never a normal
     // preview. The renderer failure reason is surfaced verbatim (no document
     // content, no sensitive data) and Retry rebuilds the WebView from scratch.
-    var fallbackReason by remember(base64Docx) { mutableStateOf<String?>(null) }
-    var docxReloadKey by remember(base64Docx) { mutableIntStateOf(0) }
+    var fallbackReason by remember(fileEntity.path) { mutableStateOf<String?>(null) }
+    var docxReloadKey by remember(fileEntity.path) { mutableIntStateOf(0) }
     // Ledger of what the renderer's search engine has already been told (Loop 12, Bug
     // B): navigation triggers now issue ONLY next/prev deltas; re-issuing searchWord()
     // per arrow press used to reset the match index to 0 so the counter stuck at 2/N.
-    var issuedSearch by remember(base64Docx) { mutableStateOf(InViewerSearchCommandPolicy.Issued()) }
+    var issuedSearch by remember(fileEntity.path) { mutableStateOf(InViewerSearchCommandPolicy.Issued()) }
     fun retryDocxRender() {
         pureKotlinFallback = null
         fallbackReason = null
@@ -70,8 +63,10 @@ fun DocxPreviewWebView(
         issuedSearch = InViewerSearchCommandPolicy.Issued()
         docxReloadKey++
     }
-    // Display-frame throttle (~30/s) for the pinch preview path (Bug E: coalescing).
-    var lastDisplayDispatchNanos by remember { androidx.compose.runtime.mutableLongStateOf(0L) }
+    // Last zoom the page itself reported. Kotlin only pushes a zoom value to the page
+    // when it differs from this (toolbar +/-, dialog) so page -> Kotlin -> page echoes
+    // can never re-anchor a gesture in progress.
+    var lastPageReportedZoom by remember(fileEntity.path) { mutableFloatStateOf(-1f) }
     val context = LocalContext.current
     val latestSearchResultCallback = androidx.compose.runtime.rememberUpdatedState(onSearchResultCount)
     val latestPageChangedCallback = androidx.compose.runtime.rememberUpdatedState(onPageChanged)
@@ -79,8 +74,6 @@ fun DocxPreviewWebView(
     val latestWebViewCreatedCallback = androidx.compose.runtime.rememberUpdatedState(onWebViewCreated)
     val latestSingleTapCallback = androidx.compose.runtime.rememberUpdatedState(onSingleTap)
     val latestZoomChangedCallback = androidx.compose.runtime.rememberUpdatedState(onZoomChanged)
-    val latestPinchZoomCallback = androidx.compose.runtime.rememberUpdatedState(onPinchZoom)
-    val latestPinchSettledCallback = androidx.compose.runtime.rememberUpdatedState(onPinchSettled)
     val latestDoubleTapCallback = androidx.compose.runtime.rememberUpdatedState(onDoubleTap)
     val latestRendererFallbackCallback = androidx.compose.runtime.rememberUpdatedState(onRendererFallback)
     // Fresh values for the WebViewClient closures created once in the factory: reading
@@ -120,22 +113,31 @@ fun DocxPreviewWebView(
             webViewRef?.evaluateJavascript("setDarkMode($isNightMode);", null)
         }
     }
-    // Loop 12 (Bug A): two-phase zoom pipeline.
-    //  - pinchActive == true  -> setZoomDisplay(): compositor-only transform preview,
-    //    throttled to ~30 dispatches/s so a large DOCX stops re-laying-out per frame.
-    //  - pinchActive == false -> setZoom(): the authoritative commit (toolbar +/-,
-    //    percentage dialog, page load, and the settle transition after a pinch).
-    LaunchedEffect(webViewRef, isWebViewLoading, zoomFactor, pinchActive, pureKotlinFallback) {
+    // Zoom is owned by the page's own gesture engine (pinch around the fingers, double
+    // tap, fit-to-width baseline). Kotlin only pushes values it originated.
+    LaunchedEffect(webViewRef, isWebViewLoading, zoomFactor, pureKotlinFallback) {
         val webView = webViewRef
         if (webView != null && !isWebViewLoading && pureKotlinFallback == null) {
-            if (pinchActive) {
-                val now = android.os.SystemClock.elapsedRealtimeNanos()
-                if (now - lastDisplayDispatchNanos < 33_000_000L) return@LaunchedEffect
-                lastDisplayDispatchNanos = now
-                webView.evaluateJavascript("setZoomDisplay($zoomFactor);", null)
-            } else {
-                lastDisplayDispatchNanos = 0L
+            if (kotlin.math.abs(zoomFactor - lastPageReportedZoom) > 0.004f) {
                 webView.evaluateJavascript("setZoom($zoomFactor);", null)
+            }
+        }
+    }
+
+    // Watchdog: a renderer that never answers must end in the labeled recovery state
+    // (with Retry), not an endless "Rendering Document..." spinner. Large files get more
+    // time. A real error from the page arrives long before this.
+    LaunchedEffect(isWebViewLoading, docxReloadKey, fileEntity.path, pureKotlinFallback) {
+        if (isWebViewLoading && pureKotlinFallback == null) {
+            val sizeMb = (File(fileEntity.path).length() / (1024L * 1024L)).coerceAtLeast(1L)
+            delay((25_000L + sizeMb * 1_000L).coerceAtMost(180_000L))
+            if (isWebViewLoading && pureKotlinFallback == null) {
+                isWebViewLoading = false
+                fallbackReason = "The document renderer did not respond in time."
+                pureKotlinFallback = runCatching {
+                    com.example.formats.docx.DocxExtractor.extractText(File(fileEntity.path))
+                }.getOrNull()
+                latestRendererFallbackCallback.value(true)
             }
         }
     }
@@ -210,7 +212,7 @@ fun DocxPreviewWebView(
                 }
             }
         } else {
-            androidx.compose.runtime.key(base64Docx, docxReloadKey) {
+            androidx.compose.runtime.key(fileEntity.path, docxReloadKey) {
                 AndroidView(
                     factory = { viewContext ->
                         // Loop 12 (Bug E): the editor page is now served through the
@@ -268,7 +270,9 @@ fun DocxPreviewWebView(
                                 displayZoomControls = false
                                 setSupportZoom(false)
                                 useWideViewPort = true
-                                loadWithOverviewMode = true
+                                // Overview mode would let a wide page shrink the layout
+                                // viewport (breaks fit-to-width + rotation).
+                                loadWithOverviewMode = false
                             }
                             setBackgroundColor(if (isNightMode) 0xFF151514.toInt() else 0xFFfaf9f5.toInt())
 
@@ -276,8 +280,27 @@ fun DocxPreviewWebView(
                             addJavascriptInterface(object : Any() {
                                 private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
+                                // Fallback transport (only used if fetch of /docx-src/ fails):
+                                // the file in 1.5 MB base64 chunks, never one giant string.
                                 @android.webkit.JavascriptInterface
-                                fun getDocxBase64(): String = base64Docx
+                                fun getDocxSize(): Double = File(fileEntity.path).length().toDouble()
+
+                                @android.webkit.JavascriptInterface
+                                fun getDocxChunk(index: Int): String {
+                                    val file = File(fileEntity.path)
+                                    val chunkSize = 1_500_000L // multiple of 3 -> clean base64 joins
+                                    val start = index.toLong() * chunkSize
+                                    if (index < 0 || start >= file.length()) return ""
+                                    return runCatching {
+                                        java.io.RandomAccessFile(file, "r").use { raf ->
+                                            raf.seek(start)
+                                            val length = minOf(chunkSize, file.length() - start).toInt()
+                                            val buffer = ByteArray(length)
+                                            raf.readFully(buffer)
+                                            android.util.Base64.encodeToString(buffer, android.util.Base64.NO_WRAP)
+                                        }
+                                    }.getOrDefault("")
+                                }
 
                                 @android.webkit.JavascriptInterface
                                 fun onDocumentLoaded(totalPages: Int) {
@@ -310,7 +333,10 @@ fun DocxPreviewWebView(
 
                                 @android.webkit.JavascriptInterface
                                 fun onZoomChanged(newZoom: Double) {
-                                    mainHandler.post { latestZoomChangedCallback.value(newZoom.toFloat()) }
+                                    mainHandler.post {
+                                        lastPageReportedZoom = newZoom.toFloat()
+                                        latestZoomChangedCallback.value(newZoom.toFloat())
+                                    }
                                 }
 
                                 @android.webkit.JavascriptInterface
