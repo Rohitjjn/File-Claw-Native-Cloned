@@ -253,6 +253,17 @@ object FilePrintHelper {
                     }
                 }
 
+                // Root cause of "DOCX prints as plain text": onDocumentLoaded used to submit
+                // the print job itself, 300ms after docx-preview finishes laying out the
+                // DOM -- BEFORE fonts/images have settled and BEFORE preparePrintLayout()
+                // fits each section to the printable A4 width. onPrintReady, fired only
+                // after that preparation genuinely completes, is the sole correct signal to
+                // print from. documentRendered just lets the safety timeout below extend
+                // itself while real (large-document) rendering is still legitimately under
+                // way, instead of ever triggering a print on its own.
+                @Volatile
+                var documentRendered = false
+
                 tempWebView.addJavascriptInterface(object : Any() {
                     @android.webkit.JavascriptInterface
                     fun onPrintReady() {
@@ -261,7 +272,7 @@ object FilePrintHelper {
 
                     @android.webkit.JavascriptInterface
                     fun onDocumentLoaded(totalPages: Int) {
-                        mainHandler.postDelayed({ triggerPrint() }, 300)
+                        documentRendered = true
                     }
 
                     @android.webkit.JavascriptInterface
@@ -293,12 +304,29 @@ object FilePrintHelper {
                     }
                 }
 
-                // Safety timeout: if formatted layout takes more than 12 seconds, fall back
-                mainHandler.postDelayed({
-                    if (!printSubmitted) {
-                        fallbackTextPrint("Format timeout")
-                    }
-                }, 12000)
+                // Safety timeout: scales with file size (large DOCX files genuinely take
+                // longer for docx-preview to lay out, and preparePrintLayout() itself waits
+                // up to 6s for fonts/images), and is pushed back once if the document has
+                // rendered but print-layout preparation is still finishing up -- so a big,
+                // image-heavy file is not punished into the plain-text fallback for simply
+                // taking its time, while a page that never rendered at all still times out.
+                val sizeMb = (docxFile.length() / (1024L * 1024L)).coerceAtLeast(1L)
+                val baseTimeoutMs = (15_000L + sizeMb * 500L).coerceAtMost(60_000L)
+                fun armSafetyTimeout(afterMs: Long) {
+                    mainHandler.postDelayed({
+                        if (printSubmitted) return@postDelayed
+                        if (documentRendered) {
+                            // Rendering finished but preparePrintLayout()/onPrintReady has not
+                            // fired yet (slow fonts/images) -- give it one more fixed window
+                            // instead of falling back while a correct print is still coming.
+                            documentRendered = false
+                            armSafetyTimeout(8_000L)
+                        } else {
+                            fallbackTextPrint("Format timeout")
+                        }
+                    }, afterMs)
+                }
+                armSafetyTimeout(baseTimeoutMs)
 
                 tempWebView.loadUrl("https://appassets.androidplatform.net/assets/editor/docx_editor.html?print=1")
             } catch (e: Exception) {
