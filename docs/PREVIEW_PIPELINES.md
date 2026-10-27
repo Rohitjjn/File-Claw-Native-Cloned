@@ -18,6 +18,16 @@ For OOXML, `FormatDetector` still refines ZIP packages by their main part
 `formats/ooxml/OoxmlPackageInspector.kt` is a validation layer called by those
 existing handlers; it does not add another registry or change route IDs.
 
+The inspector's DOM parsing of metadata parts runs through
+`formats/ooxml/OfficeXmlHardening.kt`, which configures the platform parser in a
+way that works on both the desktop JVM (tests/CI) and Android's bundled Harmony
+parser: Xerces-only features are applied best-effort where supported, and a
+mandatory full-bytes DOCTYPE/ENTITY scan of every parsed part keeps the XXE
+rejection platform independent. Rejecting a package never depends on an optional
+parser feature; unexpected inspection failures are classified (stage + exception
+class) through `OoxmlPackageInspector.failureSink` without logging paths or
+content.
+
 ## PDF
 
 1. `formats/pdf/PdfFormatHandler.kt` returns `FileContentState.PdfSuccess`.

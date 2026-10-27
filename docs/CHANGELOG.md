@@ -2,6 +2,25 @@
 
 This file records verified changes in the current working task. It does not reconstruct unreliable historical release notes from old prompts or logs. The app's Gradle version defaults remain `1.3.0` / version code `3`; this work does not bump the app version.
 
+## Unreleased — 2026-10-27 — Office preview Android parser compatibility fix
+
+### Root cause fixed
+
+- **Every valid DOCX/XLSX/PPTX failed on Android with "This Office package is damaged or unsupported."** The shared `OoxmlPackageInspector.parseSecureXml()` configured `DocumentBuilderFactory` with desktop-JVM-only calls: `isXIncludeAware = false` (the Android base class always throws `UnsupportedOperationException` here) and `setFeature(FEATURE_SECURE_PROCESSING, ...)` plus four Xerces feature URLs (Android's bundled Harmony parser supports only the `namespaces` and `validation` features and throws `ParserConfigurationException` for every other feature URL; verified against AOSP `libcore`). The first unsupported call threw, and the broad `catch (Throwable)` in `inspect()` converted it into the generic damaged-package message. All desktop-JVM tests and CI stayed green because the desktop Xerces parser supports every one of those calls — the new `kotlin-inspector-jvm --simulate-android-xml` harness mode reproduces the device failure on the unfixed code.
+
+### Changes
+
+- Added `formats/ooxml/OfficeXmlHardening.kt`: one Android-compatible secure XML configuration for the inspector's metadata parts. Hardening features are applied best-effort where the platform supports them (and honestly reported), `setXIncludeAware` refusal is ignored (XInclude is off by default everywhere), and a mandatory full-bytes `<!DOCTYPE`/`<!ENTITY` scan of every parsed part keeps the XXE rejection platform independent — including DOCTYPEs hidden behind >64 KB comments that the previous 64 KB prefix scan could miss on Android.
+- `OoxmlPackageInspector` now classifies unexpected failures: `InvalidPackageException` paths are unchanged, and hidden Throwables are reported through a privacy-safe `failureSink` (stage + exception class name only; no paths, file names, content or credentials). `FileClawApp` installs the sink as a warning log tagged `OfficePreview`.
+- Added `OoxmlPackageInspectorAndroidCompatTest` with an `AndroidLikeDocumentBuilderFactory` test double that reproduces Android's factory semantics inside the Gradle unit-test JVM, so this failure class can never again pass CI while breaking on devices.
+
+### Verification
+
+- `OoxmlPackageInspectorTest` + `OoxmlPackageInspectorAndroidCompatTest`: 20/20 pass on the desktop JVM with the real Apache Commons Compress 1.26.1.
+- `tools/office-preview-tests/kotlin-inspector-jvm/run.sh`: 27/27 fixture cases pass in desktop mode and 27/27 in the new `SIMULATE_ANDROID_XML=1` mode (real Commons Compress, no ZIP stub).
+- Realistic LibreOffice-validated corpus (rich DOCX/XLSX/PPTX with Hindi/Devanagari and Arabic RTL text, tables, image, formulas, multiple sheets; macro-enabled variant; encrypted OLE2; truncated; misleading extension; path traversal; 70 KB-comment-hidden DOCTYPE; 9.6 MB zero-fill ZIP bomb): 11/11 expected outcomes in both parser modes.
+- Bundled renderer regression (`npm test`, headless Chromium): 18/18 pass; `npm run syntax`: pass. Bundled JavaScript was not modified.
+
 ## Unreleased — 2026-10-27 — Office preview repair, expansion and renderer verification
 
 ### Root causes fixed

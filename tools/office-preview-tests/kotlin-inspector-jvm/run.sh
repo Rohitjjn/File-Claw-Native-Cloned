@@ -48,11 +48,21 @@ mkdir -p "$TMP/stub" "$TMP/classes"
 
 "$KOTLINC" -classpath "$TMP/stub" -d "$TMP/classes" \
   "$REPO_ROOT/app/src/main/java/com/example/formats/ooxml/OoxmlPackageInspector.kt" \
-  "$HERE/src/main/kotlin/OoxmlInspectorHarness.kt"
+  "$REPO_ROOT/app/src/main/java/com/example/formats/ooxml/OfficeXmlHardening.kt" \
+  "$HERE/src/main/kotlin/OoxmlInspectorHarness.kt" \
+  "$HERE/src/main/kotlin/AndroidLikeXmlFactory.kt"
 
 RUN_ARGS=("$FIXTURES")
 if [[ -n "$OUTPUT" ]]; then
   RUN_ARGS+=("$OUTPUT")
 fi
+
+# SIMULATE_ANDROID_XML=1 installs Android's DocumentBuilderFactory behavior before the
+# cases run: setFeature supports only namespaces/validation and setXIncludeAware always
+# throws UnsupportedOperationException, exactly like the bundled Harmony parser.
+if [[ "${SIMULATE_ANDROID_XML:-0}" == "1" ]]; then
+  RUN_ARGS+=("--simulate-android-xml")
+fi
+
 "$JAVA" -cp "$TMP/classes:$TMP/stub:$KOTLIN_STDLIB" \
   OoxmlInspectorHarnessKt "${RUN_ARGS[@]}"

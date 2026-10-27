@@ -4,14 +4,10 @@ import org.apache.commons.compress.archivers.zip.ZipArchiveEntry
 import org.apache.commons.compress.archivers.zip.ZipFile
 import org.w3c.dom.Document
 import org.w3c.dom.Element
-import org.xml.sax.InputSource
-import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.io.RandomAccessFile
-import javax.xml.XMLConstants
-import javax.xml.parsers.DocumentBuilderFactory
 
 /**
  * Bounded validation and identification for the existing OOXML preview handlers.
@@ -44,6 +40,50 @@ object OoxmlPackageInspector {
 
     enum class Variant { STANDARD, MACRO_ENABLED, TEMPLATE, MACRO_TEMPLATE, SHOW, ADD_IN, UNKNOWN }
 
+    /**
+     * Inspection phase a failure belongs to. Reported through [failureSink] so the app
+     * can log where an untrusted package was rejected without any file path, file name,
+     * document content or credential ever reaching the log.
+     */
+    enum class InspectionStage {
+        PACKAGE_ACCESS,
+        ENTRY_STRUCTURE,
+        XML_SCAN,
+        CONTENT_TYPES,
+        RELATIONSHIPS,
+        VARIANT_IDENTIFY
+    }
+
+    /** Structured, privacy-safe failure classification (stage + exception class only). */
+    data class OfficeInspectionFailure(
+        val stage: InspectionStage,
+        val exceptionType: String,
+        /** The fixed user-facing rejection reason for expected rejections; null otherwise. */
+        val reason: String?
+    )
+
+    /**
+     * Optional diagnostic hook. The inspector itself never logs; the application can
+     * install a sink (for example `android.util.Log`) to receive one [OfficeInspectionFailure]
+     * per rejected package. Only stage names, exception class names and the fixed
+     * rejection messages are reported — never file paths, file names or content.
+     */
+    @Volatile
+    var failureSink: ((OfficeInspectionFailure) -> Unit)? = null
+
+    /** Per-call phase tracking; a fresh instance is used for every [inspect] call. */
+    private class InspectionContext {
+        var stage: InspectionStage = InspectionStage.PACKAGE_ACCESS
+    }
+
+    private fun reportFailure(ctx: InspectionContext, exceptionType: String, reason: String?) {
+        try {
+            failureSink?.invoke(OfficeInspectionFailure(ctx.stage, exceptionType, reason))
+        } catch (_: Throwable) {
+            // A diagnostic hook must never break inspection itself.
+        }
+    }
+
     data class PackageInfo(
         val family: Family,
         val variant: Variant,
@@ -61,25 +101,38 @@ object OoxmlPackageInspector {
     )
 
     fun inspect(file: File): PackageInfo {
+        val ctx = InspectionContext()
         if (!file.isFile || file.length() <= 0L) {
+            reportFailure(ctx, InvalidPackageException::class.java.name, "The Office file is empty or unavailable.")
             throw InvalidPackageException("The Office file is empty or unavailable.")
         }
+        ctx.stage = InspectionStage.PACKAGE_ACCESS
         if (file.length() > MAX_PACKAGE_BYTES) {
+            reportFailure(ctx, InvalidPackageException::class.java.name, "This Office file is too large to preview safely.")
             throw InvalidPackageException("This Office file is too large to preview safely.")
         }
         if (hasOle2Magic(file)) {
+            reportFailure(
+                ctx,
+                InvalidPackageException::class.java.name,
+                "This Office file is encrypted or password-protected. Remove the password and try again."
+            )
             throw InvalidPackageException(
                 "This Office file is encrypted or password-protected. Remove the password and try again."
             )
         }
 
         return try {
-            ZipFile(file).use { zip -> inspectZip(zip) }
+            ZipFile(file).use { zip -> inspectZip(zip, ctx) }
         } catch (error: InvalidPackageException) {
+            reportFailure(ctx, InvalidPackageException::class.java.name, error.message)
             throw error
         } catch (error: Throwable) {
             // Zip libraries can throw Errors on hostile archives. Turn every failure
             // into a recoverable preview error; never leak the file path or content.
+            // Classify the failing stage and exception type so the true cause of an
+            // unexpected failure is diagnosable from logs (type name only).
+            reportFailure(ctx, error.javaClass.name, null)
             throw InvalidPackageException("This Office package is damaged or unsupported.")
         }
     }
@@ -95,8 +148,9 @@ object OoxmlPackageInspector {
         false
     }
 
-    private fun inspectZip(zip: ZipFile): PackageInfo {
+    private fun inspectZip(zip: ZipFile, ctx: InspectionContext): PackageInfo {
         val entries = zip.entries.toList()
+        ctx.stage = InspectionStage.ENTRY_STRUCTURE
         if (entries.isEmpty() || entries.size > MAX_ZIP_ENTRIES) {
             throw InvalidPackageException("This Office package has an unsupported number of parts.")
         }
@@ -141,10 +195,12 @@ object OoxmlPackageInspector {
             }
         }
 
+        ctx.stage = InspectionStage.XML_SCAN
         scanXmlParts(zip, names)
+        ctx.stage = InspectionStage.CONTENT_TYPES
         val contentTypesXml = readPart(zip, "[Content_Types].xml", MAX_XML_PART_BYTES)
             ?: throw InvalidPackageException("This Office package is missing its content types.")
-        val contentTypes = parseSecureXml(contentTypesXml, "[Content_Types].xml")
+        val contentTypes = parseSecureXml(contentTypesXml)
         val overrides = contentTypes.getElementsByTagName("Override")
 
         val mainPart = when {
@@ -172,7 +228,9 @@ object OoxmlPackageInspector {
 
         val hasMacros = names.any { it.endsWith("vbaProject.bin", ignoreCase = true) } ||
             mainContentType.contains("macroEnabled", ignoreCase = true)
+        ctx.stage = InspectionStage.VARIANT_IDENTIFY
         val variant = variantFor(mainContentType, hasMacros)
+        ctx.stage = InspectionStage.RELATIONSHIPS
         val externalCount = countExternalRelationships(zip, names)
 
         val notes = mutableListOf<String>()
@@ -219,7 +277,7 @@ object OoxmlPackageInspector {
         for (name in names) {
             if (!name.endsWith(".rels", ignoreCase = true)) continue
             val xml = readPart(zip, name, MAX_XML_PART_BYTES) ?: continue
-            val document = parseSecureXml(xml, name)
+            val document = parseSecureXml(xml)
             val relationships = document.getElementsByTagName("Relationship")
             for (i in 0 until relationships.length) {
                 val relationship = relationships.item(i) as? Element ?: continue
@@ -310,30 +368,16 @@ object OoxmlPackageInspector {
         return out.toByteArray()
     }
 
-    private fun parseSecureXml(bytes: ByteArray, label: String): Document {
-        val factory = DocumentBuilderFactory.newInstance().apply {
-            isNamespaceAware = false
-            isXIncludeAware = false
-            isExpandEntityReferences = false
-            setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true)
-        }
-        // Reject DOCTYPE entirely. Some XML parsers silently resolve an external
-        // entity even when external entity features are toggled; DOCTYPE is not
-        // valid in these OOXML metadata parts anyway.
-        runCatching {
-            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
-            factory.setFeature("http://xml.org/sax/features/external-general-entities", false)
-            factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false)
-            factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
-        }.getOrElse {
-            throw InvalidPackageException("The XML parser cannot safely inspect this $label part.")
-        }
-        return try {
-            factory.newDocumentBuilder().parse(InputSource(ByteArrayInputStream(bytes)))
-        } catch (_: Exception) {
-            throw InvalidPackageException("This Office package contains invalid XML metadata.")
-        }
-    }
+    /**
+     * Hardened DOM parsing of one bounded metadata part, delegated to
+     * [OfficeXmlHardening]. The previous inline configuration used JVM-only parser
+     * features unconditionally (XInclude, FEATURE_SECURE_PROCESSING, Xerces feature
+     * URLs), which always throw on Android's bundled parser and rejected every valid
+     * Office package on real devices; see [OfficeXmlHardening] for the platform-safe
+     * configuration and the parser-independent DOCTYPE defense.
+     */
+    private fun parseSecureXml(bytes: ByteArray): Document =
+        OfficeXmlHardening.parseSecureXml(bytes)
 
     fun familyFor(mainPart: String): Family = when {
         mainPart.startsWith("word/") -> Family.WORD

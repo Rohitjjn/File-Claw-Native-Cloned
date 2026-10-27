@@ -97,10 +97,19 @@ private fun writeReport(path: String, results: List<Result>) {
 }
 
 fun main(args: Array<String>) {
-    require(args.size in 1..2) { "Usage: OoxmlInspectorHarness <fixtures-dir> [output-json]" }
-    val root = File(args[0])
+    require(args.isNotEmpty() && args.size <= 3) { "Usage: OoxmlInspectorHarness <fixtures-dir> [output-json] [--simulate-android-xml]" }
+    val simulateAndroidXml = "--simulate-android-xml" in args
+    val positional = args.filter { it != "--simulate-android-xml" }
+    val root = File(positional[0])
+    if (simulateAndroidXml) {
+        AndroidLikeXmlFactory.install()
+        println("parser mode: ANDROID simulation (setFeature/setXIncludeAware behave as on device)")
+    } else {
+        println("parser mode: desktop JVM default")
+    }
     val results = mutableListOf<Result>()
-    for (case in CASES) {
+    try {
+        for (case in CASES) {
         val file = File(root, case.name)
         val failures = mutableListOf<String>()
         try {
@@ -130,10 +139,13 @@ fun main(args: Array<String>) {
         val detail = failures.joinToString("; ").takeIf { it.isNotBlank() }
         results += Result(case.name, detail == null, detail)
         println("${if (detail == null) "PASS" else "FAIL"} ${case.name}${detail?.let { ": $it" } ?: ""}")
+        }
+    } finally {
+        if (simulateAndroidXml) AndroidLikeXmlFactory.uninstall()
     }
     val passed = results.count { it.passed }
     val failed = results.size - passed
-    println("OOXML_INSPECTOR_RESULT cases=${results.size} passed=$passed failed=$failed")
-    if (args.size == 2) writeReport(args[1], results)
+    println("OOXML_INSPECTOR_RESULT cases=${results.size} passed=$passed failed=$failed${if (simulateAndroidXml) " mode=android-sim" else ""}")
+    if (positional.size >= 2) writeReport(positional[1], results)
     if (failed > 0) System.exit(1)
 }
