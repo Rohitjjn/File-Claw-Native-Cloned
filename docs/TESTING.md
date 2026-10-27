@@ -60,7 +60,7 @@ behavior changes still need an emulator/device pass.
 - Kotlin 1.9.22 PSI syntax parse of all 181 Kotlin source files: **PASS**, 0 syntax-error nodes. This is a parser check, not type checking or a Gradle build.
 - Chromium visual inspection: DOCX basic, PPTX rich print and spreadsheet grid screenshots were inspected; the DOCX page is visible, PPTX print contains slide text/image/table and the grid keeps headers/cells readable on a 390 px viewport.
 - `git diff --check`: **PASS** after the final local edits.
-- Gradle/JVM unit tests/APK/lint/detekt: **NOT RUN LOCALLY**. A task-local JDK 17 was installed only for the JVM-inspector harness; the Android SDK, Gradle distribution/dependencies, emulator and ADB remain unavailable. GitHub CI is required for these results.
+- Gradle/JVM unit tests/APK/lint: **NOT RUN LOCALLY**; **PASS IN CI** on PR #8 for `assembleDebug`, `assembleRelease` (including R8 minification and `lintVitalRelease`) and `testDebugUnitTest`. A task-local JDK 17 was installed only for the JVM-inspector and pure-Kotlin harnesses; the Android SDK, Gradle distribution/dependencies, emulator and ADB remain unavailable locally. `lintDebug`, `detekt` and `jacocoCoreVerify` were not run locally or in CI.
 - Android device/emulator tests: **NOT RUN** in this environment.
 
 ## Fixture coverage

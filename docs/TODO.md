@@ -6,9 +6,9 @@ the remaining verification and compatibility work.
 
 ## Required runtime gates
 
-- [ ] Observe the final commit's `Android Build Verification` CI result for debug/release compilation, release shrinking and JVM unit tests.
-- [ ] Observe the final commit's `Office Renderer Tests` CI result for JavaScript syntax, OOXML validation, headless Chromium renderer tests and the `kotlin-inspector` JVM harness.
-- [ ] On a JDK 17 + Android SDK 34 machine, run `compileDebugKotlin`, `testDebugUnitTest`, `assembleDebug`, `assembleRelease`, `lintDebug`, `detekt` and `jacocoCoreVerify` and record each result separately.
+- [x] Observe the final commit's `Android Build Verification` CI result for debug/release compilation, release shrinking and JVM unit tests — **PASS** on PR #8.
+- [x] Observe the final commit's `Office Renderer Tests` CI result for JavaScript syntax, OOXML validation, headless Chromium renderer tests and the `kotlin-inspector` JVM harness — **PASS** on PR #8.
+- [ ] On a JDK 17 + Android SDK 34 machine, run `compileDebugKotlin`, `testDebugUnitTest`, `assembleDebug`, `assembleRelease`, `lintDebug`, `detekt` and `jacocoCoreVerify` and record each result separately. CI covers the first four; `lintDebug`, `detekt` and `jacocoCoreVerify` remain unrun.
 - [ ] Install the APK on an emulator/device and open every supported Office format from local storage, an external content intent and a ZIP entry.
 - [ ] Verify Android System WebView version, `WebViewAssetLoader` requests, absence of `file://`/network requests, search/navigation, zoom/pan, double-tap, dark/light themes, orientation, lifecycle, back/retry, share, print/export and safe save.
 

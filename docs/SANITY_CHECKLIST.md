@@ -4,9 +4,9 @@ Use this checklist on an emulator or physical Android device after building the 
 
 ## Developer checks before the device pass
 
-- [ ] `npm run syntax`, `validate_ooxml.py`, `npm test` and `kotlin-inspector-jvm/run.sh` pass locally or in CI.
-- [ ] `git diff --check` and a Kotlin PSI syntax parse pass.
-- [ ] Observe the `Office Renderer Tests` and `Android Build Verification` CI results for the final commit.
+- [x] `npm run syntax`, `validate_ooxml.py`, `npm test` and `kotlin-inspector-jvm/run.sh` pass locally and in CI.
+- [x] `git diff --check` and a Kotlin PSI syntax parse pass locally.
+- [x] Observe the `Office Renderer Tests` and `Android Build Verification` CI results for the final commit — both PASS on PR #8.
 
 ## PDF viewer
 

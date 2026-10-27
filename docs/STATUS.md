@@ -29,16 +29,18 @@ This status distinguishes source/browser verification from Android compilation a
 | Spreadsheet virtualization | Chromium 5,001-row payload | **PASS**: 125 visible DOM cells, ~2.58 MiB JS heap in the isolated browser process; no crash. Basic/adversarial/empty payloads also passed. |
 | Heavy/adversarial DOCX | Chromium matrix: rich, variants, XXE/traversal, external rel, truncated, corrupt, 50 MiB ZIP bomb, misleading extension | **PASS as browser asset behavior**: variants rendered; malformed/bomb packages produced explicit errors; no `/etc/passwd` expansion; no external requests. Production `OoxmlPackageInspector` rejects the hostile packages before the renderer. |
 | `git diff --check` | local Git | **PASS** after final local edits. |
-| Kotlin/Gradle compile, JVM unit tests, APK assembly, lint/detekt | `./gradlew ...` | **NOT RUN LOCALLY**: the Android SDK, Gradle distribution/dependencies, emulator and ADB are absent. A task-local JDK 17 was installed only for the JVM-inspector harness. Exact Gradle blocker without that JDK: `ERROR: JAVA_HOME is not set and no 'java' command could be found in your PATH.` |
+| Kotlin/Gradle compile, JVM unit tests, APK assembly, lint/detekt | `./gradlew ...` | **NOT RUN LOCALLY**; **PASS IN CI** for `assembleDebug`, `assembleRelease` (R8 + `lintVitalRelease`) and `testDebugUnitTest`. `lintDebug`, `detekt` and `jacocoCoreVerify` were not run locally or in CI. Android SDK, Gradle distribution/dependencies, emulator and ADB are absent locally; a task-local JDK 17 was installed only for the JVM-inspector and pure-Kotlin harnesses. |
 | Android WebView / PrintManager / device | emulator/device | **NOT RUN**: no Android runtime available in this environment. |
 
 ## CI status
 
-The new `Office Renderer Tests` workflow (renderer/validator and
-`kotlin-inspector` jobs) and existing `Android Build Verification` workflow are
-configured to run on the pull request. Their observed results for the final
-commit are recorded in the final report after the PR is created; no CI result is
-claimed before it is observed.
+Observed on PR [#8](https://github.com/Rohitjjn/File-Claw-Native-Cloned/pull/8) after the final commit:
+
+- `Android Build Verification` / **Compile debug and minified release; run unit tests**: **PASS** (6m 8s). Debug and minified release APKs built; all JVM unit tests passed.
+- `Office Renderer Tests` / **Validate OOXML fixtures and bundled renderer assets**: **PASS** (32s).
+- `Office Renderer Tests` / **Exercise the Kotlin OOXML package inspector on a JVM**: **PASS** (24s).
+
+Two earlier CI iterations failed: the first exposed three Kotlin compile errors (fixed), the second exposed four JVM unit-test assertions (fixed). No CI result is claimed for `lintDebug`, `detekt`, `jacocoCoreVerify` or on-device behavior.
 
 ## Remaining acceptance checks
 
