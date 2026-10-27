@@ -33,7 +33,10 @@ object OoxmlPackageInspector {
     const val XML_DOCTYPE_SCAN_BYTES = 64L * 1024L
     const val MAX_XML_SCAN_BYTES = 32L * 1024L * 1024L
     const val MAX_RELATIONSHIP_PARTS = 512
-    const val MAX_COMPRESSION_RATIO = 2_000L
+    // DEFLATE cannot exceed roughly 1,032:1, so a 2,000:1 threshold was
+    // unreachable and would never reject a real ZIP bomb. 1,000:1 still allows
+    // normal OOXML/media compression but blocks near-maximum expansion.
+    const val MAX_COMPRESSION_RATIO = 1_000L
     const val MAX_NAME_LENGTH = 1_024
     const val MAX_PATH_DEPTH = 32
 

@@ -29,7 +29,21 @@ object OleTextRecovery {
         Character.CURRENCY_SYMBOL.toInt(),
         Character.MODIFIER_SYMBOL.toInt(),
         Character.OTHER_SYMBOL.toInt(),
-        Character.SURROGATE.toInt()
+        Character.SURROGATE.toInt(),
+        // Combining marks keep Indic/Arabic words intact; format characters
+        // preserve zero-width joiners and emoji variation selectors.
+        Character.NON_SPACING_MARK.toInt(),
+        Character.COMBINING_SPACING_MARK.toInt(),
+        Character.ENCLOSING_MARK.toInt(),
+        Character.FORMAT.toInt(),
+        Character.LETTER_NUMBER.toInt()
+    )
+
+    private val USEFUL_MARK_TYPES = setOf(
+        Character.NON_SPACING_MARK.toInt(),
+        Character.COMBINING_SPACING_MARK.toInt(),
+        Character.ENCLOSING_MARK.toInt(),
+        Character.FORMAT.toInt()
     )
 
     data class RecoveredText(
@@ -105,8 +119,26 @@ object OleTextRecovery {
         return cleaned(paragraphs)
     }
 
-    fun qualityScore(recovered: RecoveredText): Int = recovered.paragraphs.sumOf { paragraph ->
-        paragraph.count { it.isLetterOrDigit() || it.isWhitespace() || it in ".,;:!?-()[]{}'\"“”/\\" }
+    private fun isUsefulTextChar(char: Char): Boolean =
+        char.isLetterOrDigit() ||
+            char.isWhitespace() ||
+            char in ".,;:!?-()[]{}'\"“”/\\" ||
+            Character.getType(char) in USEFUL_MARK_TYPES
+
+    /**
+     * Letters and digits are stronger evidence of correctly decoded text than
+     * whitespace/punctuation. Weighting them prevents a mis-decoded 8-bit view
+     * of UTF-16LE bytes (mostly spaces and NUL separators) from outscoring the
+     * real Unicode recovery.
+     */
+    fun qualityScore(recovered: RecoveredText): Int = recovered.paragraphs.fold(0) { total, paragraph ->
+        total + paragraph.fold(0) { score, char ->
+            score + when {
+                char.isLetterOrDigit() -> 2
+                isUsefulTextChar(char) -> 1
+                else -> 0
+            }
+        }
     }
 
     private fun isPrintableUnicode(char: Char): Boolean {
@@ -125,9 +157,7 @@ object OleTextRecovery {
     }
 
     private fun looksLikeText(value: String): Boolean {
-        val useful = value.count {
-            it.isLetterOrDigit() || it.isWhitespace() || it in ".,;:!?-()[]{}'\"“”/\\"
-        }
+        val useful = value.count(::isUsefulTextChar)
         if (useful * 100 < value.length * 85) return false
         // Long runs with no word separator are usually mis-decoded binary data.
         return value.length <= 40 || value.any { it.isWhitespace() || it == ',' || it == '.' }

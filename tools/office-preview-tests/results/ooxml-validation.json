@@ -336,7 +336,7 @@
       "expected": "reject",
       "sha256": "5ad0d27580efd6eef08b183aff6588aec9f541e57612edf396afd9e22f28121f",
       "status": "reject",
-      "reason": "invalid main content type"
+      "reason": "unsafe compression ratio"
     }
   ]
 }

@@ -13,7 +13,7 @@ data class ArchiveLimits(
     val maxEntryBytes: Long = 2L * 1024 * 1024 * 1024,
     val maxTotalBytes: Long = 16L * 1024 * 1024 * 1024,
     /** Compression ratio above which an entry larger than [ratioFloorBytes] is treated as a bomb. */
-    val maxRatio: Double = 2000.0,
+    val maxRatio: Double = 1000.0,
     /** Entries nested deeper than this are shown flat and flagged, protecting recursive UI code. */
     val maxDepth: Int = 64,
     val ratioFloorBytes: Long = 4L * 1024 * 1024

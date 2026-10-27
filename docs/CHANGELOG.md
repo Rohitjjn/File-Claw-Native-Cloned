@@ -14,7 +14,8 @@ This file records verified changes in the current working task. It does not reco
 
 - Added shared OOXML package validation/variant detection for DOCX/DOCM/DOTX/DOTM, XLSX/XLSM/XLTX/XLTM and PPTX/PPTM/PPSX/POTX/POTM. Macro and template variants are clearly read-only; macros never run.
 - Added bounded legacy `.ppt` Unicode text recovery, improved legacy `.doc` Unicode recovery, and an explicit encrypted-OLE2 error state. `ole2` metadata is now Partial rather than Identify only.
-- Added hardened Office WebView origin/settings, asset-path traversal rejection, XXE/DOCTYPE rejection, ZIP-bomb/ratio/entry limits and external-relationship blocking/counting.
+- Added hardened Office WebView origin/settings, asset-path traversal rejection, XXE/DOCTYPE rejection, ZIP-bomb/ratio/entry limits and external-relationship blocking/counting. The effective ZIP-bomb ratio cap is 1,000:1 (DEFLATE cannot exceed roughly 1,032:1), not an unreachable 2,000:1.
+- Fixed legacy OLE2 text recovery for Indic/Arabic combining marks, emoji surrogate pairs and zero-width joiners; the UTF-16 quality score now outranks a mis-decoded single-byte view of the same bytes.
 - Added spreadsheet/presentation bottom-tray controls consistent with the existing PDF/DOCX pill: search, zoom, navigation, copy, print and share. The tray scrolls horizontally on narrow screens; non-functional controls are hidden in text-recovery states.
 - Added dedicated PPTX and spreadsheet print/export paths and corrected Office MIME types used by sharing.
 

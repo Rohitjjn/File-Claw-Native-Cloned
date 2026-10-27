@@ -50,7 +50,7 @@ Keep the WebView HTML, JS libraries, document URI, and MIME responses local and 
 ### Archives and other large-format paths
 
 - Archive tree construction stops after **200,000 entries** and flags unsafe/deep paths (configured depth **64**). `ArchiveTreeBuilder` uses a path index and iterative sorting; the source describes its construction as O(n log n).
-- Extraction is capped at **2 GiB per entry**. The **2,000:1** compression-ratio check above **4 MiB** is only possible on paths that provide compressed-size metadata (the ZIP/Zip4j path). Other extraction paths still apply the per-entry streamed-byte cap.
+- Extraction is capped at **2 GiB per entry**. The **1,000:1** compression-ratio check above **4 MiB** is only possible on paths that provide compressed-size metadata (the ZIP/Zip4j path). Other extraction paths still apply the per-entry streamed-byte cap.
 - `ArchiveLimits.maxTotalBytes` is declared as **16 GiB** but is not enforced. `ArchiveTree.totalSize` only records declared sizes. Do not rely on an aggregate archive-output cap until that source gap is addressed and tested. Archive listing also does not apply the per-entry extraction-size cap.
 - OpenDocument text extraction caps XML input at **64 MiB** and output at **5,000,000 characters**. EPUB processing caps a chapter input at **16 MiB** and generated preview text at about **3,000,000 characters**.
 - STL/OBJ parsing accepts up to **300,000 triangles**. The 3D viewer samples triangles for drawing using a stride based on a 25,000-triangle target; it is a rendering sample, not a model-file size limit.

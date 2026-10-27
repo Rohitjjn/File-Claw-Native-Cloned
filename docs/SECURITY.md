@@ -30,7 +30,7 @@ rejects:
 
 - empty, OLE2/encrypted or over-96 MiB packages;
 - more than 10,000 entries, duplicate names, symlink entries, encrypted ZIP entries, absolute/drive/encoded-traversal paths and path depth over 32;
-- more than 512 MiB total expanded data, any single part over 128 MiB, and compression ratios above 2,000:1 for entries over 4 MiB;
+- more than 512 MiB total expanded data, any single part over 128 MiB, and compression ratios at or above 1,000:1 for entries over 4 MiB;
 - DOCTYPE/ENTITY declarations in any XML/relationship part (including UTF-16 variants), invalid content types, missing main parts and family/content mismatches;
 - `file:`, `javascript:`, `data:` and `content:` external relationship targets.
 
