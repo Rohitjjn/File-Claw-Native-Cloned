@@ -42,6 +42,7 @@ androidx-navigation-compose = { group = "androidx.navigation", name = "navigatio
 commons-compress = { group = "org.apache.commons", name = "commons-compress", version.ref = "commonsCompress" }
 xz = { group = "org.tukaani", name = "xz", version.ref = "xz" }
 fastexcel-reader = { group = "org.dhatim", name = "fastexcel-reader", version.ref = "fastExcel" }
+fastexcel-writer = { group = "org.dhatim", name = "fastexcel", version.ref = "fastExcel" }
 zip4j = { group = "net.lingala.zip4j", name = "zip4j", version = "2.11.5" }
 telephoto-zoomable-coil = { group = "me.saket.telephoto", name = "zoomable-image-coil", version.ref = "telephoto" }
 

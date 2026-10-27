@@ -293,8 +293,26 @@
             container.style.transform = `scale(${previewRatio})`;
         }
 
-        // On window resize / orientation change: update baseScale and preserve visible page
-        window.addEventListener('resize', function () {
+        // Re-fits the page to the current viewport width and keeps whatever page was
+        // on screen in view (same page, same scroll fraction within it).
+        //
+        // ROOT CAUSE of "preview is a blank white page, Print shows the document fine":
+        // this page's fit-to-width zoom is computed from window.innerWidth/innerHeight,
+        // which only reflects the WebView's TRUE on-screen size once Jetpack Compose has
+        // finished laying it out. Compose can finish that layout pass AFTER this page has
+        // already loaded and rendered (it starts loading the instant the AndroidView is
+        // created, before Compose necessarily knows its final size) -- and unlike a real
+        // OS window resize, an embedded WebView being resized by its parent's layout does
+        // not reliably fire a DOM 'resize' event. The old code only recalculated zoom on
+        // 'resize', so a page that rendered before Compose's final layout pass could stay
+        // zoomed/positioned for a stale (sometimes near-zero) size forever -- invisible or
+        // off-screen, with no further signal to fix it. The print WebView in
+        // FilePrintHelper is given its size explicitly before it loads, so it never hit
+        // this, which is exactly why print always showed the real content.
+        //
+        // A ResizeObserver on <html> reacts to the WebView's actual rendered size
+        // changing for ANY reason (Compose layout included), so it catches this case too.
+        function relayoutForViewport() {
             if (isPrintMode || !container) return;
             const pages = Array.from(container.querySelectorAll('.docx'));
             let anchorPage = null;
@@ -318,7 +336,24 @@
                     if (Math.abs(delta) > 1) scroller.scrollTop += delta;
                 }
             });
-        });
+        }
+
+        window.addEventListener('resize', relayoutForViewport);
+
+        if ('ResizeObserver' in window) {
+            let pendingRelayout = false;
+            const sizeObserver = new ResizeObserver(function () {
+                // One pending relayout at a time; ResizeObserver can fire several times
+                // per layout pass while Compose settles the WebView's final bounds.
+                if (pendingRelayout) return;
+                pendingRelayout = true;
+                requestAnimationFrame(function () {
+                    pendingRelayout = false;
+                    relayoutForViewport();
+                });
+            });
+            sizeObserver.observe(document.documentElement);
+        }
 
         // ---------------------------------------------------------------------------
         // Focal-Point Anchored Touch Gestures (Pinch-to-zoom & Double-tap)
@@ -586,10 +621,44 @@
                 observePages();
                 if (!isPrintMode) optimizeLargeDocument();
 
-                if (window.Android && window.Android.onDocumentLoaded) {
-                    window.Android.onDocumentLoaded(totalPages);
-                }
-                if (isPrintMode) {
+                if (!isPrintMode) {
+                    // Confirm something is actually visible before declaring success.
+                    // Checked one frame later so the zoom/relayout above has applied.
+                    requestAnimationFrame(function () {
+                        requestAnimationFrame(function () {
+                            const firstPage = container.querySelector('.docx');
+                            const visible = firstPage && firstPage.getBoundingClientRect().width > 4
+                                && firstPage.getBoundingClientRect().height > 4
+                                && getComputedStyle(firstPage).visibility !== 'hidden'
+                                && getComputedStyle(firstPage).display !== 'none';
+                            if (visible) {
+                                if (window.Android && window.Android.onDocumentLoaded) {
+                                    window.Android.onDocumentLoaded(totalPages);
+                                }
+                            } else {
+                                // One automatic recovery attempt (a fresh relayout pass
+                                // sometimes fixes a Compose-layout-timing miss) before
+                                // surfacing it as an error the Kotlin side falls back on.
+                                relayoutForViewport();
+                                requestAnimationFrame(function () {
+                                    requestAnimationFrame(function () {
+                                        const retryRect = firstPage ? firstPage.getBoundingClientRect() : null;
+                                        if (retryRect && retryRect.width > 4 && retryRect.height > 4) {
+                                            if (window.Android && window.Android.onDocumentLoaded) {
+                                                window.Android.onDocumentLoaded(totalPages);
+                                            }
+                                        } else {
+                                            showLoadError('The formatted page rendered with no visible content.');
+                                        }
+                                    });
+                                });
+                            }
+                        });
+                    });
+                } else {
+                    if (window.Android && window.Android.onDocumentLoaded) {
+                        window.Android.onDocumentLoaded(totalPages);
+                    }
                     preparePrintLayout().then(function () {
                         if (window.Android && window.Android.onPrintReady) {
                             window.Android.onPrintReady();

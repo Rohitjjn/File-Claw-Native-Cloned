@@ -2,6 +2,134 @@
 
 This file records verified changes in the current working task. It does not reconstruct unreliable historical release notes from old prompts or logs. The app's Gradle version defaults remain `1.3.0` / version code `3`; this work does not bump the app version.
 
+## Unreleased — 2026-10-26 — DOCX blank preview, XLSX crash + light edit, PPTX rewrite
+
+### Fixed / changed
+
+- **Issue 1 — DOCX preview was a blank white page (Print showed the real content):**
+  root cause is a layout-timing race, not a rendering bug: `docx_editor.html`'s
+  fit-to-width zoom is computed from `window.innerWidth`, which only reflects the
+  WebView's true on-screen size once Jetpack Compose finishes laying it out -- and
+  Compose can finish that layout pass *after* the page has already rendered (the
+  on-screen WebView starts loading as soon as it is created, before Compose
+  necessarily knows its final size). Unlike an OS window resize, a WebView being
+  resized by its parent's Compose layout does not reliably fire a DOM `resize` event,
+  so the old code (which only recalculated zoom on `resize`) could get stuck showing a
+  page sized/positioned for a stale, sometimes near-invisible size, with no further
+  signal to correct it. The print WebView in `FilePrintHelper` is given its size
+  explicitly before it loads, so it never hit this -- which is exactly why Print always
+  showed the document correctly. Added a `ResizeObserver` on the document root that
+  reacts to the WebView's actual rendered size changing for any reason, Compose layout
+  included, and reuses the same anchored-relayout logic the old `resize` handler had.
+  As a second line of defense, after rendering finishes the page now explicitly checks
+  that the first page has a non-trivial visible size before reporting success; if not,
+  it retries the relayout once, and only then reports a clear, retryable error instead
+  of leaving the user looking at nothing (`docx_editor.html`).
+- **Issue 2 — Excel (XLSX) files crashed the app on open:** `XlsxFormatHandler.open()`
+  let any failure from the third-party reader propagate uncaught. The view-model's
+  surrounding try/catch only catches `Exception` and `OutOfMemoryError` specifically;
+  other crash classes a parsing library can realistically throw on a real device
+  (`LinkageError`/`NoClassDefFoundError`, `StackOverflowError`, a plain
+  `RuntimeException` on a malformed workbook) are not `Exception` subtypes and were
+  never caught anywhere -- crashing the whole app instead of showing an error screen.
+  Every failure is now caught there and turned into a normal, retryable
+  `FileContentState.Error`; a handful of cell types that can throw out of the library's
+  own text conversion now fall back to the raw stored value instead of failing the
+  whole file. Separately, `MAX_VIEW_ROWS`/`MAX_VIEW_COLUMNS` (50,000 / 256 -- up to
+  12.8M cells) were lowered to 20,000 / 100: that worst case, carried through a JSON +
+  Base64 string and then a second copy inside the WebView for the x-spreadsheet grid,
+  could reach several hundred MB and is a very plausible cause of a crash on any
+  reasonably large, dense real-world spreadsheet; files beyond the new caps are
+  truncated with a visible notice instead, the same mechanism already used for CSV.
+- **"Light edit mode" for XLSX (new):** single-sheet workbooks can now be edited in the
+  existing spreadsheet grid UI (the same `CsvPreview`/x-spreadsheet surface CSV already
+  uses) and saved back as a real `.xlsx` file, via a new `fastexcel-writer`-based
+  `XlsxFormatHandler.save()`. This writes plain cell **values** only -- no formulas,
+  styling, column widths or merged cells -- matching the tier of editing CSV already
+  has, not a full spreadsheet editor. Multi-sheet workbooks deliberately stay
+  view-only: only the first sheet is ever shown, and lightly editing it could silently
+  drop the other sheets on save, so editing is only offered when there is exactly one
+  sheet to begin with (`CsvSuccess.spreadsheetEditable`, `FormatSaveRequest.Spreadsheet`,
+  `XlsxWorkbookLoader.write`, `MainViewModel.saveSpreadsheetFile`).
+- **Issue 3 — PPTX files did not open properly:** the PPTX reader loaded its editor page
+  through the legacy `file:///android_asset/` scheme (PDF and DOCX both already use the
+  modern `WebViewAssetLoader`/`https://appassets.androidplatform.net/` origin) and
+  pushed the *entire* presentation into the page as one Base64 string embedded in a
+  single `evaluateJavascript()` call -- the same memory-multiplying, reliability-risking
+  pattern already identified and replaced for DOCX in the previous round, and more
+  likely to be hit here since PPTX files (embedded images) tend to be larger.
+  `PptxPreviewWebView.kt` is rewritten to mirror the PDF/DOCX readers: the editor page
+  and the presentation's bytes are both served through `WebViewAssetLoader`, and the
+  file is streamed in directly as an `ArrayBuffer` (`fetch('/pptx-src/presentation.pptx')`)
+  instead of being Base64-encoded anywhere (`OoxmlDocumentHandler.kt` no longer
+  Base64-encodes PPTX either, for the same reason it stopped for DOCX, and the 25MB
+  archive-view fallback no longer applies to either format). The initial slide layout
+  is now deferred two animation frames so it measures the WebView's real, settled size
+  rather than a possibly-stale one (same class of issue as Issue 1, applied
+  proactively here). Separately, testing surfaced that the bundled `pptx-preview.min.js`
+  (a pure client-side renderer) can throw on slide structures it does not fully handle
+  even for a structurally valid PPTX (observed: a theme/background lookup assumes a
+  shape some files don't have) -- a known limitation of this category of library, not
+  specific to this change. Rather than leave the user with nothing when that happens,
+  `pptx_editor.html` now falls back to extracting each slide's plain text directly from
+  the OOXML with JSZip (already loaded for the renderer itself) and shows that, the
+  same "degrade to text, never to blank" approach already used for DOCX
+  (`DocxTextRecovery.kt`).
+- **Issue 4 — general MS Office format hardening:** covered by the fixes above for
+  DOCX/XLSX/PPTX. Legacy binary `.doc`/`.xls` already have a basic, crash-guarded,
+  read-only text/table extraction (`LegacyOfficeFormatHandler.kt`, pre-existing,
+  verified during this work); legacy `.ppt` and building new parsers for formats with
+  no existing support at all were out of scope for this pass.
+
+### Verification
+
+- Headless Chromium (Playwright) harness, as in the previous round, plus:
+  - `docx_editor.html`: loaded at a 1x1 viewport (simulating the WebView's size before
+    Compose has finished laying it out) with the page's own `resize` listener registration
+    actively suppressed, then grown to 390x780 -- confirmed the `ResizeObserver` path
+    alone (with no `resize` event at all) still corrects the zoom and reports a normal,
+    correctly-sized page; repeated with `resize` left intact to confirm no regression
+    for the ordinary case. Both produce an identical, correctly fitted result.
+  - `pptx_editor.html`: an 8-slide generated PPTX streamed end-to-end through the new
+    `/pptx-src/` route and `fetch()` pipeline. On this generated file the bundled
+    renderer threw its known theme/background error; confirmed the new plain-text
+    fallback engaged automatically, extracted and displayed all 8 slides' text (with a
+    visible "could not be fully formatted" notice), and reported a normal
+    `onDocumentLoaded` rather than an error.
+  - Full prior-round PDF (open/scrub/rotate/resize, 400-page and 126MB cases) and DOCX
+    print-mode suites re-run unchanged to confirm no regression from this round's edits.
+- Kotlin changes checked with `kotlinc` against the Android SDK stub jar for parse
+  errors, and each changed file's error list diffed line-for-line against the same
+  check run on the unmodified file: identical categories/counts in every case (the
+  `androidx.compose`/`androidx.webkit` AAR classes and the `fastexcel`/`dhatim` reader
+  classes are not on this offline stub classpath, which is what those diagnostics are
+  about), confirming no new parse errors were introduced anywhere. The
+  `org.dhatim.fastexcel.**` Proguard keep rule already covers the newly added writer
+  package (same top-level namespace as the reader). No Gradle/JVM toolchain was
+  available to run a full build, so `fastexcel-writer`'s exact API surface
+  (`Workbook`/`Worksheet`/`.value(row, col, value)`/`.finish()`) was additionally
+  confirmed against the library's published Javadoc/README for version 0.15.3 before
+  use.
+
+### Not verifiable off-device (please check on a phone / emulator)
+
+1. The DOCX blank-preview fix on an actual device/WebView build, ideally against
+   whatever real-world file originally reproduced it -- the layout-timing race this
+   fixes is specific to Compose + Android WebView and could not be reproduced directly
+   outside Android; the harness instead proves the `ResizeObserver` recovery mechanism
+   itself works correctly when `resize` is unavailable.
+2. Opening and lightly editing a real single-sheet XLSX end-to-end (edit a cell, Save,
+   reopen, confirm the new value persisted and the file still opens in Excel/Sheets);
+   opening a large, real-world, multi-sheet XLSX to confirm it no longer crashes and
+   correctly shows as read-only with the sheet-count notice.
+3. Opening a selection of real, PowerPoint-authored PPTX files -- the bundled renderer
+   may well handle real files it was actually tested against better than the
+   synthetically generated ones used here; worth checking whether the full-fidelity
+   view or the text-only fallback is what most real files hit.
+4. `./gradlew testDebugUnitTest` / `assembleDebug`, including confirming the
+   `fastexcel-writer` dependency resolves and the app's `minSdk` is compatible with it
+   (no JVM/Gradle toolchain was available in this environment).
+
 ## Unreleased — 2026-10-24 — PDF page scroller, rounded loader, DOCX print & large-file fixes
 
 ### Fixed / changed

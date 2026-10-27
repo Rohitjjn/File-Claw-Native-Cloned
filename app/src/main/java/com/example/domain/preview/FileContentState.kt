@@ -35,9 +35,18 @@ sealed class FileContentState {
         val file: RecentFileEntity,
         val truncated: Boolean = false,
         val readOnlyReason: String? = null,
-        val table: DelimitedTableData? = null
+        val table: DelimitedTableData? = null,
+        /**
+         * Light-edit mode for workbook formats (XLSX) that don't have a [table]: a
+         * values-only save handled by [FormatSaveRequest.Spreadsheet] rather than the
+         * delimited-table path. [sheetName] is the single sheet a save writes back to;
+         * only set alongside [spreadsheetEditable].
+         */
+        val spreadsheetEditable: Boolean = false,
+        val sheetName: String? = null
     ) : FileContentState() {
-        val editable: Boolean get() = !truncated && readOnlyReason == null && table != null
+        val editable: Boolean
+            get() = !truncated && readOnlyReason == null && (table != null || spreadsheetEditable)
     }
 
     data class ZipSuccess(
