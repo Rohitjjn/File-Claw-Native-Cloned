@@ -1,0 +1,158 @@
+{
+  "generated_by": "tools/office-preview-tests/generate_fixtures.py",
+  "license": "Original fixtures are CC0-1.0; Apache POI fixtures are Apache-2.0 (see fixtures/LICENSES.md and fixtures/poi/LICENSE.txt).",
+  "files": {
+    "fixtures/LICENSES.md": {
+      "sha256": "9252c1ee67ca015aaf9fb6104949576599f6f457668d9c9f5769ce499d17e2b9",
+      "bytes": 1743
+    },
+    "fixtures/adversarial.docx": {
+      "sha256": "91b088b027cffba571310880975238d9e49a0e028bde8964390ef3c50bfc1a8b",
+      "bytes": 36392
+    },
+    "fixtures/basic.docm": {
+      "sha256": "de764e0ae8a8866dd38bbb9dc1cf342f8c1a25f9f57a07622288a09bf7212fbb",
+      "bytes": 37074
+    },
+    "fixtures/basic.docx": {
+      "sha256": "d909dee7f0f153521920651e01857d2171682ebbb2dde87e6924de404bb9481e",
+      "bytes": 36909
+    },
+    "fixtures/basic.dotx": {
+      "sha256": "c48797614e1db100a4d89c507eb266bf45470b23710b997489c25bc211ab567c",
+      "bytes": 36914
+    },
+    "fixtures/basic.potx": {
+      "sha256": "1d35ba06ee7264cbafa8b0d385aee8b5a4894e482077a685eab1cb085ab31717",
+      "bytes": 29260
+    },
+    "fixtures/basic.pptm": {
+      "sha256": "7242daf3cc8c634c6d69c116efbd1781b20b5d9dc629a01848a9bacb653d932d",
+      "bytes": 29427
+    },
+    "fixtures/basic.pptx": {
+      "sha256": "2d4f71d0bdd2ed06366fc3edb5654a67489af157e29a3f0cc31b282e871557f2",
+      "bytes": 29255
+    },
+    "fixtures/basic.xlsm": {
+      "sha256": "499e787ff049b10b2068fa0c2870525d2097ad9e0f76601d509916863431da4c",
+      "bytes": 6029
+    },
+    "fixtures/basic.xlsx": {
+      "sha256": "ddd88ce0cdc93d03935e6d686fdccbed2e96a38f63aab42b455462d4ace9310c",
+      "bytes": 5864
+    },
+    "fixtures/basic.xltx": {
+      "sha256": "5f151cc92d31a30c665763c674fe1db184995c29dc10d5547de8226cecc2d35f",
+      "bytes": 5866
+    },
+    "fixtures/corrupt.pptx": {
+      "sha256": "cced75c9f73ab89a1fbba7fd6d103bd9df31b0cf0c4cc35bd48e35f8ccf9dc59",
+      "bytes": 28
+    },
+    "fixtures/empty.xlsx": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "fixtures/external-rel.docx": {
+      "sha256": "2dc397bf1b019d971a3a71ee05785d96661efc2c001e5f5fe5d93e0bdc5fb90a",
+      "bytes": 36779
+    },
+    "fixtures/large.xlsx": {
+      "sha256": "0f4c9ac0db4d6ca06507207ed1d36a2f9063615509f60ab5afbd146313dfc3ed",
+      "bytes": 133329
+    },
+    "fixtures/legacy.xls": {
+      "sha256": "fdd2daadefbbef909278760f10708e23b8c5155dca1b8be52283359b40f28f28",
+      "bytes": 5632
+    },
+    "fixtures/misleading.pdf": {
+      "sha256": "d909dee7f0f153521920651e01857d2171682ebbb2dde87e6924de404bb9481e",
+      "bytes": 36909
+    },
+    "fixtures/poi/LICENSE.txt": {
+      "sha256": "6e7c918e5a49f677c1b85a9eb2d035cd85c217fc42af6b4a336964a434001a9c",
+      "bytes": 14416
+    },
+    "fixtures/poi/legacy-1900.xls": {
+      "sha256": "7fe0d8901353b8846e8e0543b893eea4283008bc89ae971674b8a9b480fcd15c",
+      "bytes": 6144
+    },
+    "fixtures/poi/legacy-41071.ppt": {
+      "sha256": "7eed4b72a235b4122b07b371fb02fbb5ae95d47dc70592ce37bb6bf4a6e94de4",
+      "bytes": 18432
+    },
+    "fixtures/poi/legacy-47304.doc": {
+      "sha256": "39170c5a103bb0961b269be04da00ae2ae961da6a26f1624f462ac915adaf13e",
+      "bytes": 22016
+    },
+    "fixtures/poi/poi-51187.pptx": {
+      "sha256": "a1728e7e6c4cf6470fd2d5cf044b6db008ddb75f512c390ab5bc71bbcf37a909",
+      "bytes": 45681
+    },
+    "fixtures/poi/poi-60158.docm": {
+      "sha256": "51377b41d9843b9418ef27be036fdbe74fa13c1dfa2b2a501191b1a24ca586b0",
+      "bytes": 15617
+    },
+    "fixtures/poi/poi-60316.dotx": {
+      "sha256": "e21a1c1e7c1f30176bf03e5228282750afd6a6708f6706eb9906c6254c08fbae",
+      "bytes": 59583
+    },
+    "fixtures/poi/poi-invalid.xlsx": {
+      "sha256": "8739c76e681f900923b900c9df0ef75cf421d39cabb54650c4b9ad19b6a76d85",
+      "bytes": 22
+    },
+    "fixtures/poi/poi-sample.docx": {
+      "sha256": "54c8f2157d6ab461f3284982f9d5b04bfdbc17308caeb6c567783ceb6121297a",
+      "bytes": 14470
+    },
+    "fixtures/poi/poi-sample.xlsx": {
+      "sha256": "7c2c5d2593f93945f26b826d6a2c3a6d1eaafe57ecb6e8b4813df72f909996b0",
+      "bytes": 12050
+    },
+    "fixtures/poi/poi-suffix.xlsm": {
+      "sha256": "8108853394e1ab8964f13d0ee81c122ebabd0c5587a9dfeb934340e7a8d333f1",
+      "bytes": 28479
+    },
+    "fixtures/rich.docx": {
+      "sha256": "63dce6fab591076ba07dd2327d2dddcf6e2a90f897a02ca2342ff7cd755e8565",
+      "bytes": 39125
+    },
+    "fixtures/rich.pptx": {
+      "sha256": "14d34272c872c8da6290130379c2d1bbbe972b1f1b2c3a3bdf1b2eb2ca3814c2",
+      "bytes": 36760
+    },
+    "fixtures/rich.xlsx": {
+      "sha256": "b2e2ddeb1fe15a0500ca24cee5537c275920af6721f83b0c5770bfff30e0510c",
+      "bytes": 14501
+    },
+    "fixtures/truncated.docx": {
+      "sha256": "a26bbfa0305d6347cdd965850603e483d28e97bfa548b0546303df142c8fa047",
+      "bytes": 12303
+    },
+    "fixtures/zip-bomb.docx": {
+      "sha256": "5ad0d27580efd6eef08b183aff6588aec9f541e57612edf396afd9e22f28121f",
+      "bytes": 51355
+    },
+    "payloads/adversarial.json": {
+      "sha256": "4ae4fdda4ce4d441ec4fa2ea0f0ece1071710d8fcb14035c63c9d77444907ff9",
+      "bytes": 5269
+    },
+    "payloads/basic.json": {
+      "sha256": "a09cb1725f5b23fe0298bed7f20cd25e8228ab6d23a015ec325dd38e899efaac",
+      "bytes": 2833
+    },
+    "payloads/empty.json": {
+      "sha256": "538c7ffecd6f59ece462fb006030670f367afaa50c151f32566f0ef924342fd6",
+      "bytes": 107
+    },
+    "payloads/large.json": {
+      "sha256": "7450916a04ac7cef09a11a3ea342f213f0b8b7d72b6277e66d2189520df42fa3",
+      "bytes": 485645
+    },
+    "payloads/rich.json": {
+      "sha256": "98eb169c2e585883cc9333548a2e4f22e9d52054fb687840ca0df8526e7d3199",
+      "bytes": 11230
+    }
+  }
+}

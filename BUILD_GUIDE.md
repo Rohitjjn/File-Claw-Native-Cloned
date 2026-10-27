@@ -31,6 +31,23 @@ For a single all-in-one check, the same task can be invoked in one Gradle proces
 ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest :app:assembleDebug --no-daemon --max-workers=1
 ```
 
+## Office renderer checks (no Android SDK)
+
+The bundled Office HTML/JavaScript viewers can be verified without Gradle:
+
+```bash
+cd tools/office-preview-tests
+npm ci
+npm run syntax
+python3 validate_ooxml.py --fixtures fixtures --output results/ooxml-validation.json
+npm test
+```
+
+These commands use Node 20+, Python 3.11+ and the pinned Chromium package in
+`tools/office-preview-tests/package.json`. They do not compile Kotlin or exercise
+Android `WebView`/`PrintManager`; run the Gradle and device checks below for
+that. See [`tools/office-preview-tests/README.md`](tools/office-preview-tests/README.md).
+
 ## Release builds and signing
 
 `app/build.gradle.kts` reads release signing values from environment variables:

@@ -33,4 +33,16 @@ The same source defines additional selected/background colors. `FilesClawTheme` 
 - PDF is intentionally light-only in the current PDF viewer. DOCX and other supported text/document surfaces have their existing theme behavior; preserve it unless the user asks otherwise.
 - Prefer using current tokens and components for a requested UI fix. This preview-repair task does not authorize unrelated visual changes.
 
+## Office viewer chrome
+
+DOCX, PPTX and spreadsheet previews reuse the existing `ClaudeAppBar`, overflow
+menu, `ViewerFindBarHeader`, floating rounded bottom pill and focus/immersive
+mode. The bottom pill now scrolls horizontally on narrow screens so slide and
+grid controls do not clip; inactive zoom controls are hidden in text-recovery
+modes. Web page surfaces use the same warm light canvas, near-black dark canvas,
+terracotta/amber accents and restrained borders. Document content remains on an
+opaque reading surface; chrome is not drawn over the document canvas. The
+spreadsheet notice and presentation/DOCX variant notices use the same accent
+tint as the existing `NoticeBanner`.
+
 No on-device contrast, animation, or performance measurement was recorded during this pass. The source values above should be checked against actual UI before making product claims.

@@ -7,60 +7,155 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
-import com.example.data.RecentFileEntity
-import com.example.viewmodel.MainViewModel
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.example.data.RecentFileEntity
+import com.example.formats.common.search.InViewerSearchCommandPolicy
+import com.example.formats.ooxml.OfficeWebViewSecurity
 import com.example.platform.webview.MimeAwareAssetsPathHandler
+import com.example.viewmodel.MainViewModel
 import java.io.File
+import kotlin.math.abs
+import kotlinx.coroutines.isActive
 
 /**
- * Issue 3 fix ("PPT file doesn't open properly"): this previously loaded the editor page
- * with the legacy `file:///android_asset/` scheme and pushed the WHOLE presentation into
- * the page as one giant Base64 string embedded in a single `evaluateJavascript()` call
- * (`"loadPptx('$base64Pptx', ...)"`) -- the exact pattern already identified and replaced
- * for DOCX (see DocxPreviewWebView.kt) because it multiplies memory use, and very large
- * inline script strings are unreliable across WebView versions. PPTX files in particular
- * tend to be large (embedded images), making this the most likely of the three formats to
- * hit that ceiling. It also never set up a WebViewAssetLoader, so `allowFileAccess = false`
- * combined with the bare `file://` origin left the page unable to reliably load its own
- * sibling resources on some WebView versions. This now mirrors the PDF/DOCX readers:
- * the editor page and the presentation's bytes are both served through
- * WebViewAssetLoader over the `https://appassets.androidplatform.net/` origin, and the
- * presentation is streamed in directly as an ArrayBuffer (`fetch('/pptx-src/...')`)
- * instead of being Base64-encoded anywhere.
+ * Offline PPTX preview over the existing bundled pptx-preview engine.
+ *
+ * The renderer is initialised only after Compose reports non-zero WebView
+ * bounds, so slides are measured from the real viewport. Slide navigation,
+ * search, zoom/pan, dark mode and an honest text-only recovery path are exposed
+ * through the same minimal bridge used by the rest of the app. No macros,
+ * remote resources, scripts from the presentation, or file-scheme access are
+ * enabled.
  */
 @Composable
 fun PptxPreviewWebView(
     fileEntity: RecentFileEntity,
     isNightMode: Boolean,
+    notice: String?,
     viewModel: MainViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onSlideChanged: (Int, Int) -> Unit = { _, _ -> },
+    goToSlide: Int? = null,
+    goToSlideToken: Int = 0,
+    onGoToSlideHandled: () -> Unit = {},
+    searchQuery: String = "",
+    searchTriggerNext: Int = 0,
+    searchTriggerPrev: Int = 0,
+    onSearchResultCount: (Int, Int, Boolean) -> Unit = { _, _, _ -> },
+    zoomFactor: Float = 1f,
+    onZoomChanged: (Float) -> Unit = {},
+    onWebViewCreated: (android.webkit.WebView?) -> Unit = {},
+    onReady: () -> Unit = {},
+    onSingleTap: () -> Unit = {},
+    onDoubleTap: () -> Unit = {},
+    onRendererFallback: (Boolean) -> Unit = {}
 ) {
-    var isWebViewLoading by remember(fileEntity.path) { mutableStateOf(true) }
-    var webViewRef by remember(fileEntity.path) { mutableStateOf<android.webkit.WebView?>(null) }
-    var loadError by remember(fileEntity.path) { mutableStateOf<String?>(null) }
-    var reloadKey by remember(fileEntity.path) { mutableIntStateOf(0) }
-
     val context = LocalContext.current
+    var reloadKey by remember(fileEntity.path) { mutableIntStateOf(0) }
+    var webViewRef by remember(fileEntity.path, reloadKey) { mutableStateOf<android.webkit.WebView?>(null) }
+    var isReady by remember(fileEntity.path, reloadKey) { mutableStateOf(false) }
+    var loadError by remember(fileEntity.path, reloadKey) { mutableStateOf<String?>(null) }
+    var issuedSearch by remember(fileEntity.path, reloadKey) {
+        mutableStateOf(InViewerSearchCommandPolicy.Issued())
+    }
+    var lastPageReportedZoom by remember(fileEntity.path, reloadKey) { mutableFloatStateOf(-1f) }
+    val layoutListeners = remember {
+        java.util.IdentityHashMap<android.webkit.WebView, android.view.ViewTreeObserver.OnGlobalLayoutListener>()
+    }
 
-    // If the renderer never calls back at all (page/script failed to load, large file
-    // still decompressing), surface a retryable error instead of spinning forever.
-    val sizeMb = remember(fileEntity.path) { (File(fileEntity.path).length() / (1024L * 1024L)).coerceAtLeast(1L) }
-    LaunchedEffect(fileEntity.path, reloadKey, isWebViewLoading) {
-        if (isWebViewLoading) {
+    val latestSlideChanged = rememberUpdatedState(onSlideChanged)
+    val latestSearchCount = rememberUpdatedState(onSearchResultCount)
+    val latestZoomChanged = rememberUpdatedState(onZoomChanged)
+    val latestWebViewCreated = rememberUpdatedState(onWebViewCreated)
+    val latestReady = rememberUpdatedState(onReady)
+    val latestSingleTap = rememberUpdatedState(onSingleTap)
+    val latestDoubleTap = rememberUpdatedState(onDoubleTap)
+    val latestFallback = rememberUpdatedState(onRendererFallback)
+    val latestGoToHandled = rememberUpdatedState(onGoToSlideHandled)
+    val latestNightMode = rememberUpdatedState(isNightMode)
+    val latestNotice = rememberUpdatedState(notice)
+    val latestZoomForPageLoad = rememberUpdatedState(zoomFactor)
+
+    fun retry() {
+        loadError = null
+        isReady = false
+        issuedSearch = InViewerSearchCommandPolicy.Issued()
+        lastPageReportedZoom = -1f
+        latestFallback.value(false)
+        reloadKey++
+    }
+
+    val sizeMb = remember(fileEntity.path) {
+        (File(fileEntity.path).length() / (1024L * 1024L)).coerceAtLeast(1L)
+    }
+    LaunchedEffect(fileEntity.path, reloadKey, isReady, loadError) {
+        if (!isReady && loadError == null) {
             kotlinx.coroutines.delay((20_000L + sizeMb * 500L).coerceAtMost(90_000L))
-            if (isWebViewLoading) {
-                isWebViewLoading = false
+            if (!isReady && loadError == null) {
                 loadError = "The presentation did not finish loading. Check that Android System WebView is up to date, then try again."
             }
         }
     }
 
-    Box(modifier = modifier.fillMaxSize().background(if (isNightMode) Color(0xFF151514) else Color(0xFFfaf9f5))) {
+    LaunchedEffect(webViewRef, isReady, isNightMode, notice) {
+        val webView = webViewRef
+        if (webView != null && isReady) {
+            webView.evaluateJavascript(
+                "setDarkMode(${latestNightMode.value}); " +
+                    "setNotice(${org.json.JSONObject.quote(latestNotice.value.orEmpty())});",
+                null
+            )
+        }
+    }
+
+    LaunchedEffect(webViewRef, isReady, zoomFactor) {
+        val webView = webViewRef
+        if (webView != null && isReady && abs(zoomFactor - lastPageReportedZoom) > 0.004f) {
+            webView.evaluateJavascript("setZoom($zoomFactor, false);", null)
+        }
+    }
+
+    LaunchedEffect(webViewRef, isReady, goToSlide, goToSlideToken) {
+        val webView = webViewRef
+        val slide = goToSlide
+        if (webView != null && isReady && slide != null) {
+            webView.evaluateJavascript("goToSlide($slide);", null)
+            latestGoToHandled.value()
+        }
+    }
+
+    LaunchedEffect(webViewRef, isReady, searchQuery, searchTriggerNext, searchTriggerPrev) {
+        val webView = webViewRef
+        if (webView != null && isReady) {
+            val plan = InViewerSearchCommandPolicy.plan(
+                issuedSearch,
+                searchQuery,
+                searchTriggerNext,
+                searchTriggerPrev
+            )
+            if (!plan.isEmpty) {
+                if (plan.search && issuedSearch.query != null) {
+                    kotlinx.coroutines.delay(150)
+                    if (!kotlin.coroutines.coroutineContext.isActive) return@LaunchedEffect
+                }
+                val script = buildString {
+                    if (plan.search) {
+                        append("searchWord(${org.json.JSONObject.quote(searchQuery)});")
+                    }
+                    repeat(plan.nextSteps) { append("nextSearchMatch();") }
+                    repeat(plan.prevSteps) { append("prevSearchMatch();") }
+                }
+                webView.evaluateJavascript(script, null)
+                issuedSearch = plan.issued
+            }
+        }
+    }
+
+    Box(modifier = modifier.fillMaxSize().background(if (isNightMode) Color(0xFF151514) else Color(0xFFFAF9F5))) {
         if (loadError == null) {
-            androidx.compose.runtime.key(fileEntity.path, reloadKey) {
+            key(fileEntity.path, reloadKey) {
                 AndroidView(
                     factory = { viewContext ->
                         val pptxAssetLoader = androidx.webkit.WebViewAssetLoader.Builder()
@@ -83,63 +178,118 @@ fun PptxPreviewWebView(
                                 }
                             })
                             .build()
+
                         android.webkit.WebView(viewContext).apply {
                             webViewRef = this
+                            latestWebViewCreated.value(this)
                             settings.apply {
-                                javaScriptEnabled = true
-                                domStorageEnabled = true
-                                // The asset loader serves both the editor page and the
-                                // presentation's bytes; no raw file scheme access is needed.
-                                allowFileAccess = false
-                                allowContentAccess = false
-                                @Suppress("DEPRECATION")
-                                allowFileAccessFromFileURLs = false
-                                @Suppress("DEPRECATION")
-                                allowUniversalAccessFromFileURLs = false
-                                builtInZoomControls = true
+                                OfficeWebViewSecurity.configure(this)
+                                builtInZoomControls = false
                                 displayZoomControls = false
-                                setSupportZoom(true)
+                                setSupportZoom(false)
                                 useWideViewPort = true
-                                loadWithOverviewMode = true
+                                loadWithOverviewMode = false
                             }
-                            setBackgroundColor(if (isNightMode) 0xFF151514.toInt() else 0xFFfaf9f5.toInt())
+                            setBackgroundColor(if (isNightMode) 0xFF151514.toInt() else 0xFFFAF9F5.toInt())
 
+                            val host = this
+                            var lastLayoutWidth = 0
+                            var lastLayoutHeight = 0
+                            val layoutListener = object : android.view.ViewTreeObserver.OnGlobalLayoutListener {
+                                override fun onGlobalLayout() {
+                                    val width = host.width
+                                    val height = host.height
+                                    if (width <= 0 || height <= 0 || (width == lastLayoutWidth && height == lastLayoutHeight)) return
+                                    lastLayoutWidth = width
+                                    lastLayoutHeight = height
+                                    host.evaluateJavascript("notifyViewport($width, $height);", null)
+                                }
+                            }
+                            viewTreeObserver.addOnGlobalLayoutListener(layoutListener)
+                            layoutListeners[host] = layoutListener
+
+                            val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
                             addJavascriptInterface(object : Any() {
                                 @android.webkit.JavascriptInterface
                                 fun onDocumentLoaded(totalSlides: Int) {
-                                    post { isWebViewLoading = false }
-                                }
-
-                                @android.webkit.JavascriptInterface
-                                fun onDocumentError(error: String) {
-                                    post {
-                                        isWebViewLoading = false
-                                        loadError = error.ifBlank { "Could not open this presentation." }
+                                    mainHandler.post {
+                                        isReady = true
+                                        latestReady.value()
+                                        latestSlideChanged.value(1, totalSlides.coerceAtLeast(1))
                                     }
                                 }
 
                                 @android.webkit.JavascriptInterface
+                                fun onSlideChanged(current: Int, total: Int) {
+                                    mainHandler.post { latestSlideChanged.value(current, total) }
+                                }
+
+                                @android.webkit.JavascriptInterface
+                                fun onDocumentError(error: String) {
+                                    mainHandler.post {
+                                        isReady = false
+                                        loadError = error.take(180).ifBlank { "Could not open this presentation." }
+                                    }
+                                }
+
+                                @android.webkit.JavascriptInterface
+                                fun onSearchResultCount(count: Int, currentIndex: Int, truncated: Boolean) {
+                                    mainHandler.post { latestSearchCount.value(count, currentIndex, truncated) }
+                                }
+
+                                @android.webkit.JavascriptInterface
+                                fun onZoomChanged(newZoom: Double) {
+                                    mainHandler.post {
+                                        if (!newZoom.isFinite()) return@post
+                                        val factor = newZoom.toFloat()
+                                        lastPageReportedZoom = factor
+                                        latestZoomChanged.value(factor)
+                                    }
+                                }
+
+                                @android.webkit.JavascriptInterface
+                                fun onDocumentTap() {
+                                    mainHandler.post { latestSingleTap.value() }
+                                }
+
+                                @android.webkit.JavascriptInterface
+                                fun onDocumentDoubleTap() {
+                                    mainHandler.post { latestDoubleTap.value() }
+                                }
+
+                                @android.webkit.JavascriptInterface
+                                fun onRendererFallback(isFallback: Boolean) {
+                                    mainHandler.post { latestFallback.value(isFallback) }
+                                }
+
+                                @android.webkit.JavascriptInterface
                                 fun exitWithoutSaving() {
-                                    post { viewModel.closeCurrentFile() }
+                                    mainHandler.post { viewModel.closeCurrentFile() }
                                 }
                             }, "Android")
 
-                            // WebViewClientCompat (not the plain framework WebViewClient) is
-                            // required here: it is the only base class whose
-                            // onReceivedError overload takes WebResourceErrorCompat, which
-                            // is what makes that override actually override something
-                            // instead of silently becoming a dead, never-called method
-                            // (same reasoning as the PDF reader's WebViewClient).
                             webViewClient = object : androidx.webkit.WebViewClientCompat() {
+                                override fun shouldOverrideUrlLoading(
+                                    view: android.webkit.WebView,
+                                    request: android.webkit.WebResourceRequest
+                                ): Boolean = OfficeWebViewSecurity.shouldBlockNavigation(request)
+
                                 override fun shouldInterceptRequest(
                                     view: android.webkit.WebView,
                                     request: android.webkit.WebResourceRequest
-                                ): android.webkit.WebResourceResponse? {
-                                    return pptxAssetLoader.shouldInterceptRequest(request.url)
-                                }
+                                ): android.webkit.WebResourceResponse? =
+                                    OfficeWebViewSecurity.intercept(request, pptxAssetLoader)
 
-                                override fun onPageFinished(view: android.webkit.WebView?, url: String?) {
-                                    view?.evaluateJavascript("loadPptx(null, $isNightMode);", null)
+                                override fun onPageFinished(view: android.webkit.WebView, url: String) {
+                                    val night = latestNightMode.value
+                                    val noticeJson = org.json.JSONObject.quote(latestNotice.value.orEmpty())
+                                    val zoom = latestZoomForPageLoad.value
+                                    view.evaluateJavascript(
+                                        "notifyViewport(${view.width}, ${view.height}); " +
+                                            "setDarkMode($night); setNotice($noticeJson); " +
+                                            "setZoom($zoom, false); loadPptx(null, $night);",
+                                        null
+                                    )
                                 }
 
                                 override fun onReceivedError(
@@ -148,53 +298,61 @@ fun PptxPreviewWebView(
                                     error: androidx.webkit.WebResourceErrorCompat
                                 ) {
                                     if (request.isForMainFrame) {
-                                        post {
-                                            isWebViewLoading = false
+                                        view.post {
+                                            isReady = false
                                             loadError = "The presentation viewer page could not be loaded."
                                         }
                                     }
                                 }
-                            }
-                            webChromeClient = object : android.webkit.WebChromeClient() {
-                                override fun onConsoleMessage(consoleMessage: android.webkit.ConsoleMessage?): Boolean {
-                                    android.util.Log.d(
-                                        "WebViewPptx",
-                                        "${consoleMessage?.message()} -- From line ${consoleMessage?.lineNumber()} of ${consoleMessage?.sourceId()}"
-                                    )
-                                    return super.onConsoleMessage(consoleMessage)
+
+                                override fun onRenderProcessGone(
+                                    view: android.webkit.WebView,
+                                    detail: android.webkit.RenderProcessGoneDetail
+                                ): Boolean {
+                                    view.post {
+                                        isReady = false
+                                        loadError = "The presentation renderer stopped unexpectedly. Please try again."
+                                    }
+                                    return true
                                 }
                             }
-                            loadUrl("https://appassets.androidplatform.net/assets/editor/pptx_editor.html")
+                            loadUrl("https://${OfficeWebViewSecurity.ASSET_HOST}/assets/editor/pptx_editor.html")
                         }
                     },
-                    update = { /* no-op */ },
+                    update = { webView ->
+                        webViewRef = webView
+                        latestWebViewCreated.value(webView)
+                        webView.setBackgroundColor(if (isNightMode) 0xFF151514.toInt() else 0xFFFAF9F5.toInt())
+                    },
+                    onRelease = { webView ->
+                        layoutListeners.remove(webView)?.let { listener ->
+                            webView.viewTreeObserver.removeOnGlobalLayoutListener(listener)
+                        }
+                        webViewRef = null
+                        latestWebViewCreated.value(null)
+                        webView.destroy()
+                    },
                     modifier = Modifier.fillMaxSize()
                 )
             }
         } else {
             Column(
-                modifier = Modifier.fillMaxSize().padding(androidx.compose.ui.unit.Dp(24f)),
+                modifier = Modifier.fillMaxSize().padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
                 Text(loadError.orEmpty(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                Spacer(modifier = Modifier.height(androidx.compose.ui.unit.Dp(12f)))
-                Button(onClick = {
-                    loadError = null
-                    isWebViewLoading = true
-                    reloadKey++
-                }) { Text("Retry") }
+                Spacer(Modifier.height(12.dp))
+                Button(onClick = { retry() }) { Text("Retry") }
             }
         }
 
-        if (isWebViewLoading && loadError == null) {
+        if (!isReady && loadError == null) {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(if (isNightMode) Color(0xFF151514) else Color(0xFFfaf9f5)),
+                modifier = Modifier.fillMaxSize().background(if (isNightMode) Color(0xFF151514) else Color(0xFFFAF9F5)),
                 contentAlignment = Alignment.Center
             ) {
-                com.example.ui.component.PremiumLoadingIndicator(text = "Loading Presentation...")
+                com.example.ui.component.PremiumLoadingIndicator(text = "Loading Presentation…")
             }
         }
     }

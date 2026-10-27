@@ -2,6 +2,31 @@
 
 This file records verified changes in the current working task. It does not reconstruct unreliable historical release notes from old prompts or logs. The app's Gradle version defaults remain `1.3.0` / version code `3`; this work does not bump the app version.
 
+## Unreleased — 2026-10-27 — Office preview repair, expansion and renderer verification
+
+### Root causes fixed
+
+- **DOCX blank preview:** the previous fix relied on a DOM `ResizeObserver`, but Android parent-layout changes do not always produce a DOM resize event. The Compose `ViewTreeObserver` now reports every real non-zero WebView size to `notifyViewport()`, and `loadDocx()` waits for that signal before rendering. Visible-content confirmation and print mode remain. Chromium reproduced the original late-layout race and confirmed a visible page even with `ResizeObserver` removed.
+- **XLSX crash:** the remaining crash path was the viewer transport, not just the parser. It injected a whole-sheet Base64 string into one `evaluateJavascript()` call and loaded scripts via `file:///android_asset/` with file access disabled. The shared bounded virtual grid now serves a JSON payload through `WebViewAssetLoader`, renders only visible cells, and saves atomically.
+- **PPTX unreliable opening:** replaced the fixed all-slide column with a layout-aware slide viewer, local-only streamed bytes, navigation, cross-slide search, zoom/pan, dark mode, text fallback and dedicated all-slide print mode.
+
+### Format and UX changes
+
+- Added shared OOXML package validation/variant detection for DOCX/DOCM/DOTX/DOTM, XLSX/XLSM/XLTX/XLTM and PPTX/PPTM/PPSX/POTX/POTM. Macro and template variants are clearly read-only; macros never run.
+- Added bounded legacy `.ppt` Unicode text recovery, improved legacy `.doc` Unicode recovery, and an explicit encrypted-OLE2 error state. `ole2` metadata is now Partial rather than Identify only.
+- Added hardened Office WebView origin/settings, asset-path traversal rejection, XXE/DOCTYPE rejection, ZIP-bomb/ratio/entry limits and external-relationship blocking/counting. The effective ZIP-bomb ratio cap is 1,000:1 (DEFLATE cannot exceed roughly 1,032:1), not an unreachable 2,000:1.
+- Fixed legacy OLE2 text recovery for Indic/Arabic combining marks, emoji surrogate pairs and zero-width joiners; the UTF-16 quality score now outranks a mis-decoded single-byte view of the same bytes.
+- Added spreadsheet/presentation bottom-tray controls consistent with the existing PDF/DOCX pill: search, zoom, navigation, copy, print and share. The tray scrolls horizontally on narrow screens; non-functional controls are hidden in text-recovery states.
+- Added dedicated PPTX and spreadsheet print/export paths and corrected Office MIME types used by sharing.
+
+### Verification
+
+- Added JVM unit tests for OOXML inspection, spreadsheet JSON/save bounds, presentation zoom, legacy Unicode/PPT record extraction and OLE2 support metadata.
+- Added `tools/office-preview-tests/` with original CC0 and Apache-2.0 POI fixtures, a SHA-256 manifest, an independent Python OOXML validator, JavaScript syntax checks, 18 headless Chromium renderer tests and a plain-JVM `OoxmlPackageInspector` harness.
+- Local results: `npm run syntax` 15/15 scripts, `validate_ooxml.py` 27/27 cases, `npm test` 18/18 cases, `kotlin-inspector-jvm/run.sh` 27/27 cases, a one-off pure-Kotlin JVM compile/23-assertion smoke test with 0 failures, Kotlin 1.9.22 PSI parse of 181 source files with 0 syntax errors, and `git diff --check`.
+- CI on PR #8: `Android Build Verification` PASS (debug + minified release APKs, R8/lintVital, JVM unit tests); `Office Renderer Tests` renderer/validator and `kotlin-inspector` jobs PASS. Two earlier CI iterations exposed three Kotlin compile errors and four JVM unit-test failures; both were diagnosed and fixed without weakening tests. `lintDebug`, `detekt`, `jacocoCoreVerify` and on-device tests remain unrun.
+- Added `.github/workflows/office-renderer-tests.yml` with renderer/validator and `kotlin-inspector` jobs; existing Android CI is unchanged.
+
 ## Unreleased — 2026-10-26 — DOCX blank preview, XLSX crash + light edit, PPTX rewrite
 
 ### Fixed / changed

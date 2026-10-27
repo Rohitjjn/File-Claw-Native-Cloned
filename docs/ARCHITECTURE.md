@@ -44,7 +44,17 @@ Format-specific parsers and rendering decisions belong in a format-family packag
 
 ## Format-family package map
 
-Current family areas include `archive`, `binary`, `common`, `csv`, `doc`, `docx`, `epub`, `font`, `html`, `image`, `legacyoffice`, `markdown`, `media`, `model3d`, `odf`, `ooxml`, `pdf`, `pptx`, `rtf`, `sqlite`, `svg`, `text`, `xls`, and `xlsx`. A package exists only where the source has an actual responsibility; do not create empty families merely to match a diagram.
+Current family areas include `archive`, `binary`, `common`, `csv`, `doc`, `docx`, `epub`, `font`, `html`, `image`, `legacyoffice`, `markdown`, `media`, `model3d`, `odf`, `ooxml`, `pdf`, `ppt`, `pptx`, `rtf`, `spreadsheet`, `sqlite`, `svg`, `text`, `xls`, and `xlsx`. A package exists only where the source has an actual responsibility; do not create empty families merely to match a diagram.
+
+## Office preview ownership
+
+- `formats/ooxml/OoxmlPackageInspector.kt` validates untrusted OOXML ZIP packages and identifies Word/Excel/PowerPoint family plus macro/template variants. It is called by the existing `OoxmlDocumentHandler` and `XlsxFormatHandler`; it does not register a second format route.
+- `formats/ooxml/OfficeWebViewSecurity.kt` centralises local-only WebView settings and request/navigation guards for DOCX, PPTX, XLSX and their print renderers.
+- `formats/docx/ui/` owns the formatted Word WebView, including the Compose→DOM viewport bridge, page/search/zoom callbacks and labeled text recovery.
+- `formats/pptx/` owns presentation zoom policy and `formats/pptx/ui/` owns slide navigation, search, print readiness and the text-only fallback.
+- `formats/spreadsheet/` owns bounded grid payload generation and `formats/spreadsheet/ui/` owns the shared virtualized WebView used by CSV/TSV and XLSX. `formats/xlsx/ui/XlsxSheetPreview.kt` is the thin XLSX adapter; `formats/csv/ui/CsvPreview.kt` keeps the existing save UI.
+- `formats/legacyoffice/OleTextRecovery.kt`, `formats/doc/LegacyDocExtractor.kt`, `formats/ppt/LegacyPptExtractor.kt` and `formats/xls/Biff8XlsParser.kt` provide bounded read-only legacy extraction. `LegacyOfficeFormatHandler` remains the single OLE2 route.
+- `platform/print/FilePrintHelper.kt` owns dedicated DOCX, PPTX and spreadsheet print adapters. `feature/preview/FilePreviewScreen.kt` only composes viewers and shared chrome.
 
 ## Tests and assets
 

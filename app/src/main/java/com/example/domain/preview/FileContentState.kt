@@ -59,8 +59,19 @@ sealed class FileContentState {
     data class ImageSuccess(val file: RecentFileEntity) : FileContentState()
     data class SvgSuccess(val file: RecentFileEntity) : FileContentState()
     data class PdfSuccess(val file: RecentFileEntity) : FileContentState()
-    data class DocxSuccess(val base64Data: String, val file: RecentFileEntity) : FileContentState()
-    data class PptxSuccess(val base64Data: String, val file: RecentFileEntity) : FileContentState()
+    data class DocxSuccess(
+        val base64Data: String,
+        val file: RecentFileEntity,
+        /** Read-only variant limits (macros, templates, external links). */
+        val notice: String? = null
+    ) : FileContentState()
+
+    data class PptxSuccess(
+        val base64Data: String,
+        val file: RecentFileEntity,
+        /** Read-only variant limits (macros, templates, external links). */
+        val notice: String? = null
+    ) : FileContentState()
     data class MediaSuccess(val file: RecentFileEntity, val isAudio: Boolean) : FileContentState()
     data class SqliteSuccess(val file: RecentFileEntity) : FileContentState()
     data class FontSuccess(val file: RecentFileEntity) : FileContentState()

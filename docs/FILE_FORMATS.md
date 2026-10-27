@@ -10,23 +10,50 @@ The source of truth is `app/src/main/java/com/example/core/format/FormatRegistry
 |---|---|
 | Plain text, code, Markdown, HTML | `TextFormatHandler` loads up to 250,000 characters for preview; a truncated view is flagged and cannot be safely saved as the whole original. HTML scripts start disabled. |
 | CSV / TSV / PSV | `DelimitedTableLoader` reads at most 50,000 rows and 256 columns; it retains encoding/BOM/line-ending metadata for its existing save path. |
-| XLSX | Existing first-sheet reader; view-only. Limits are 50,000 rows and 256 columns. |
-| DOCX / PPTX | Existing local WebView renderers; the shared OOXML handler sends files over 25 MiB to the existing archive route. DOCX is not an editor. |
+| XLSX and CSV/TSV | Shared bounded virtual grid. Workbook view is first-sheet, values-only: 20,000 rows, 100 columns, 4,000 characters/cell, 8,000,000 total characters. Light cell-value editing is offered only for a complete, single-sheet, non-macro, non-template XLSX workbook. |
+| DOCX / PPTX | Existing local WebView renderers, now preceded by a shared OOXML package inspector and started only after the real WebView bounds are known. No arbitrary 25 MiB archive fallback; packages are bounded by compressed/expanded size, entry count, ratio and XML safety. Both are read-only previews. |
 | PDF | Existing bundled PDF.js WebView reader with password/error callbacks, range serving, bounded canvas policy and a three-page resident render window. |
 | RTF | Text extraction into a read-only text state; loader limit is 20,000,000 characters. Formatting fidelity is not promised. |
 | OpenDocument | `content.xml` text extraction only; XML input is limited to 64 MiB and extracted output to 5,000,000 characters. |
 | EPUB | Spine-order text/HTML preview through sanitization; per-chapter input is limited to 16 MiB and generated preview to about 3,000,000 characters. Images are not retained. |
-| Archives and compressed streams | Listing caps the tree at 200,000 entries and flags unsafe paths/deep nesting (configured depth 64). Extraction caps one expanded entry at 2 GiB; the 2,000:1 ratio check above 4 MiB applies only when ZIP metadata provides compressed size. A declared 16 GiB aggregate limit is not enforced. RAR is identify-only. |
-| Legacy Office | `.doc` text recovery and `.xls` grid extraction are attempted read-only; other OLE2 variants use the identify-only fallback. |
+| Archives and compressed streams | Listing caps the tree at 200,000 entries and flags unsafe paths/deep nesting (configured depth 64). Extraction caps one expanded entry at 2 GiB; the 1,000:1 ratio check above 4 MiB applies only when ZIP metadata provides compressed size. A declared 16 GiB aggregate limit is not enforced. RAR is identify-only. |
+| Legacy Office | `.doc` and `.ppt` use bounded Unicode text recovery; `.xls` uses read-only first-sheet BIFF cell extraction. Encrypted packages and `.xlsb` are not decoded; other OLE2 variants use the identify-only hex view. |
 | STL / OBJ | Existing parser accepts STL and OBJ with a 300,000-triangle input cap; other 3D/CAD metadata groups are identify-only. |
 | Images, audio, video, fonts, SQLite | Existing family viewers use Android/device decoding or family-specific readers. Codec/decoder compatibility varies by device; inspect the family source before promising a particular variant. |
 | Other binary types | Bounded hex/ASCII identification view; this does not decode the format. |
+
+## Microsoft Office support matrix
+
+The registry keeps one route per format family (for example `docx` covers several
+OOXML Word variants). The matrix below is the verified behavior of the family
+handlers, not an extension-only promise. “Read-only” means no in-app editing is
+offered; the original file is never rewritten by a preview.
+
+| Format family | Verified in-app behavior | Edit / save | Print / export | Important limitations |
+|---|---|---|---|---|
+| `.docx` | Formatted WebView preview with page tracking, search, zoom/pan, dark mode and text recovery on renderer failure. | None. | Dedicated print renderer / PDF export. | No full Word layout engine; unsupported fields, complex equations, ActiveX and remote content may be omitted. |
+| `.docm`, `.dotx`, `.dotm` | Same read-only Word preview when the package is valid. A banner states macros/templates are not executed. | None. | Same as DOCX. | Macros, add-ins and template instantiation are unsupported. |
+| `.xlsx` | Bounded first-sheet values grid with search, zoom, copy, safe cell edit prompt and dark mode. | Values-only light edit for a complete, single-sheet, non-macro workbook. Atomic replace; source URI/archive sync uses the existing ViewModel path. | Bounded HTML table print / PDF export. | Formulas are shown as cached/text values; styles, merged cells, charts, images, comments and additional sheets are not preserved by a save. Multi-sheet/truncated/macro/template workbooks are explicitly read-only. |
+| `.xlsm`, `.xltx`, `.xltm` | Same read-only values grid. | Disabled: a values-only save would destroy macros/template metadata. | Same as XLSX. | Macros are never executed. |
+| `.pptx` | Formatted slide preview with previous/next/jump navigation, cross-slide search, zoom/pan, dark mode, images, tables and text-only fallback. | None. | Dedicated all-slide print renderer / PDF export. | Animations, transitions, embedded video/audio, fonts not on the device and some SmartArt may be approximated or omitted. |
+| `.pptm`, `.ppsx`, `.potx`, `.potm` | Same read-only presentation preview when the package is valid. | None. | Same as PPTX. | Macros, show settings and template instantiation are unsupported. |
+| `.doc` | Bounded Unicode text recovery in the existing text viewer. | None. | Prints recovered text. | No binary formatting, tables, images or page layout. |
+| `.xls` | Bounded first-sheet BIFF cell extraction in the grid. | None. | Bounded HTML table print. | No formulas evaluation, styling, charts or extra sheets. |
+| `.ppt` | Bounded Unicode slide-text recovery in the existing text viewer. | None. | Prints recovered text. | No slide layout, images, tables, charts, animations or media. |
+| `.xlsb`, other OLE2 Office | Identify-only hex/ASCII view. | None. | No meaningful document print. | Convert to OOXML for a preview. |
+| Encrypted/password-protected Office | Explicit unsupported error state. | None. | None. | Remove the password outside the app and reopen. |
+
+Content detection wins over a misleading extension, but the family handler
+validates the package's actual main part before rendering. A Word package named
+`.xlsx`, for example, is rejected with a mismatch error instead of being passed
+to a spreadsheet parser. External relationships are counted and blocked from
+network/file access; macros and document scripts are never executed.
 
 ## Registered format inventory
 
 <!-- Inventory parsed from app/src/main/java/com/example/core/format/FormatRegistry.kt. Companion generator: tools/GenFormatDocs.kt; it is not wired to a Gradle task. -->
 
-**399 registered extensions across 69 format groups:** 284 Full, 32 Partial, 83 Identify only.
+**399 registered extensions across 69 format groups:** 284 Full, 33 Partial, 82 Identify only.
 
 | ID | Format name | File kind | Metadata support | MIME type | Extensions |
 |---|---|---|---|---|---|
@@ -54,7 +81,7 @@ The source of truth is `app/src/main/java/com/example/core/format/FormatRegistry
 | `ods` | OpenDocument spreadsheet | Odf | Partial | `application/vnd.oasis.opendocument.spreadsheet` | `ods`, `ots` |
 | `odp` | OpenDocument presentation | Odf | Partial | `application/vnd.oasis.opendocument.presentation` | `odp`, `otp` |
 | `epub` | EPUB e-book | Epub | Full | `application/epub+zip` | `epub` |
-| `ole2` | Legacy Microsoft Office (OLE2) | Legacy office | Identify only | `application/x-ole-storage` | `doc`, `xls`, `ppt`, `msg`, `vsd`, `xlsb`, `wps`, `mpp` |
+| `ole2` | Legacy Microsoft Office (OLE2) | Legacy office | Partial | `application/x-ole-storage` | `doc`, `xls`, `ppt`, `msg`, `vsd`, `xlsb`, `wps`, `mpp` |
 | `png` | PNG image | Image | Full | `image/png` | `png`, `apng` |
 | `jpeg` | JPEG image | Image | Full | `image/jpeg` | `jpg`, `jpeg`, `jfif`, `jpe` |
 | `gif` | GIF image | Image | Full | `image/gif` | `gif` |

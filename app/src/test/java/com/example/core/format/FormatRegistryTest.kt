@@ -44,6 +44,7 @@ class FormatRegistryTest {
         assertEquals(FileKind.DELIMITED, FormatRegistry.byExtension("tsv")?.kind)
         assertEquals(FileKind.LEGACY_OFFICE, FormatRegistry.byExtension("xls")?.kind)
         assertEquals(Support.IDENTIFY, FormatRegistry.byExtension("rar")?.support)
+        assertEquals(Support.PARTIAL, FormatRegistry.byId("ole2")?.support)
         assertEquals(FileKind.TEXT, FormatRegistry.byExtension("ts")?.kind)
     }
 

@@ -1,43 +1,159 @@
-# Existing PDF and DOCX preview pipelines
+# Document preview pipelines
 
-This page documents the current implementation and the focused WebView asset fix in this worktree. It does not add a preview format or claim an Android device test has passed.
+This page records the current source flow for PDF and Microsoft Office previews,
+the root causes of the three reported Office failures, and the evidence that is
+still required on a real Android device. Browser-based checks are real rendering
+checks of the bundled HTML/JavaScript assets; they are not Android `WebView` or
+`PrintManager` tests.
 
 ## Shared route into a viewer
 
-`MainViewModel.openFile()` → `FormatDetector.detect(file, file.name)` → the existing `core.format.FormatRegistry` handler route → a family handler's `FileContentState` → `feature/preview/FilePreviewScreen.kt` → the family UI. PDF and DOCX both reach their success-state branches in source. That proves the routing branch exists; it does not prove the WebView rendered the file.
+`MainActivity` / incoming intent → `MainViewModel.openFile()` →
+`FormatDetector.detect(file, file.name)` → the single `core.format.FormatRegistry`
+handler route → a family handler's `FileContentState` →
+`feature/preview/FilePreviewScreen.kt` → family viewer.
+
+For OOXML, `FormatDetector` still refines ZIP packages by their main part
+(`word/document.xml`, `xl/workbook.xml`, `ppt/presentation.xml`). The new
+`formats/ooxml/OoxmlPackageInspector.kt` is a validation layer called by those
+existing handlers; it does not add another registry or change route IDs.
 
 ## PDF
 
-1. `formats/pdf/PdfFormatHandler.kt` returns `FileContentState.PdfSuccess` for a detected PDF.
-2. `feature/preview/FilePreviewScreen.kt` composes `formats/pdf/ui/PdfPreview.kt`.
-3. `PdfPreview` loads the bundled page `app/src/main/assets/pdfjs/search.html` from the HTTPS-style `WebViewAssetLoader` origin at `/assets/pdfjs/search.html`.
-4. The page imports the local PDF.js ES modules and worker from the same packaged asset tree. The exact PDF bytes are requested through `/search-pdf/document.pdf`; `formats/pdf/PdfRangeResponder.kt` serves full or byte-range responses from the file. No network PDF service is involved.
-5. The page reports readiness, page changes, search, password prompts, and failures through the existing JavaScript bridge. Page rendering uses the existing PDF render-budget and page-residency policies; do not remove their caps as a preview workaround.
+1. `formats/pdf/PdfFormatHandler.kt` returns `FileContentState.PdfSuccess`.
+2. `FilePreviewScreen` composes `formats/pdf/ui/PdfPreview.kt`.
+3. The bundled `pdfjs/search.html` page is served through `WebViewAssetLoader`.
+   `MimeAwareAssetsPathHandler` gives `.js`/`.mjs` files the standard
+   `text/javascript` MIME type.
+4. PDF bytes are served by `PdfRangeResponder`; no network service is involved.
+5. Readiness, page changes, search, password prompts and failures flow through
+   the existing JavaScript bridge. Existing render-budget and residency caps
+   remain in force.
 
-### PDF asset change
+## DOCX — blank white preview
 
-The previous custom `.mjs` asset response used `application/javascript`. Module scripts are checked strictly by browsers; the standard `text/javascript` MIME is the recommended response. The app now shares `platform/webview/MimeAwareAssetsPathHandler.kt`, which overrides `.js` and `.mjs` assets to `text/javascript` while letting AndroidX serve all other files normally. `LocalWebViewMimeTypesTest` contains tests for the pure mapping, but those tests have not run because Gradle could not start; see [`STATUS.md`](STATUS.md).
+### Root cause
 
-This is a concrete source-level loader correction, but it is not a reproduction of the reported Android WebView failure. The preview still needs a runtime smoke test on an emulator or device, including the PDF.js module, worker, PDF bytes, and a real PDF. See [`STATUS.md`](STATUS.md).
+The print pipeline and the on-screen pipeline use the same `docx_editor.html`
+renderer, but only the on-screen pipeline runs the fit-to-width layout engine.
+Compose can finish laying out an `AndroidView` **after** the page's
+`onPageFinished()` callback. A DOM `resize` event is not reliably emitted when a
+parent ViewGroup changes a WebView's bounds. The preview could therefore compute
+its zoom and first-page geometry from a stale or zero viewport and leave the
+rendered page off-screen; print mode skipped that layout engine entirely, which
+is why Print showed the document.
 
-## DOCX
+### Current pipeline and fix
 
-1. The existing format metadata maps the Word OOXML extensions to the DOCX route. `formats/ooxml/OoxmlDocumentHandler.kt` handles DOCX/PPTX state creation; for DOCX it retains a base64 fallback string and sends files larger than 25 MiB to the existing archive path.
-2. `feature/preview/FilePreviewScreen.kt` composes `formats/docx/ui/DocxPreviewWebView.kt` for `FileContentState.DocxSuccess`.
-3. The page is loaded from `app/src/main/assets/editor/docx_editor.html` through the `/assets/` `WebViewAssetLoader` path. Its `jszip.min.js` and `docx-preview.min.js` scripts are local assets.
-4. The page requests the source at `/docx-src/document.docx`, which is served from the file path by a dedicated local asset-loader handler. If that fetch is unavailable, the existing bridge can supply the base64 copy.
-5. The WebView reports a successful render through the Android bridge. On a main-page, render, or WebView-process failure, the current UI switches to an explicitly labeled text-recovery state when extraction succeeds and offers retry. Recovered text is not a formatted DOCX preview.
+1. `OoxmlDocumentHandler` validates the OOXML package and returns
+   `DocxSuccess` with a variant notice; no Base64 copy is kept in state.
+2. `DocxPreviewWebView` serves the page, JSZip, docx-preview and the source bytes
+   from fixed `WebViewAssetLoader` routes. `OfficeWebViewSecurity` blocks all
+   non-local navigation/requests.
+3. A `ViewTreeObserver.OnGlobalLayoutListener` reports every real non-zero
+   Compose layout to `notifyViewport(width, height)`. `onPageFinished` seeds the
+   same signal.
+4. `loadDocx()` waits for `waitForViewport()` before fetching/rendering.
+   `ResizeObserver`, `pageshow` and `visibilitychange` remain defensive relayout
+   paths. After rendering, the page verifies that the first `.docx` section has
+   visible dimensions before calling `onDocumentLoaded`.
+5. Search, page tracking, pinch/double-tap zoom, dark mode, print, retry and the
+   labeled text-recovery state remain on the existing shared UI/bridge.
 
-The DOCX viewer and the DOCX print WebView now use the same MIME-aware `/assets/` handler as PDF, so local `.js` assets get the explicit standard JavaScript MIME type. Existing print behavior and its text-recovery path remain in `platform/print/FilePrintHelper.kt`.
+Evidence: Chromium 153 renders a visible page from a 1×1 viewport that later
+changes to 390×844 even with `ResizeObserver` deleted; print mode still calls
+`onPrintReady`. See `tools/office-preview-tests/results/renderer-tests.json`.
+
+## XLSX — crash on open
+
+### Root cause
+
+The previous `CsvPreview` generated an inline HTML page whose scripts were
+loaded from `file:///android_asset/` while the WebView disabled file access. It
+then passed the entire worksheet as a Base64 string inside one
+`evaluateJavascript("loadData('...')")` call. A dense workbook could exceed
+WebView's script-string limit or exhaust memory before a single cell appeared;
+the parser's own failures were already caught, but the rendering transport was
+not.
+
+### Current pipeline and fix
+
+1. `XlsxFormatHandler` validates the package, then loads a bounded first-sheet
+   values model (20,000 rows, 100 columns, 4,000 characters/cell, 8,000,000
+   total characters).
+2. `formats/spreadsheet/SpreadsheetGridPayload.kt` builds one JSON document with
+   safe escaping; truncation disables editing.
+3. `formats/spreadsheet/ui/SpreadsheetGridWebView.kt` serves the page, script and
+   JSON through the local asset-loader origin. The page materialises only
+   visible cells; a 5,001-row payload produces ~125 DOM cells in Chromium.
+4. Edits are emitted as one-cell deltas to `CsvPreview`, which keeps the existing
+   pending-edit/back-confirmation UI and calls
+   `MainViewModel.saveSpreadsheetFile`. `XlsxWorkbookLoader.write` uses
+   `AtomicFileWriter`; multi-sheet, truncated, macro and template workbooks are
+   read-only.
+5. `FilePrintHelper.printSpreadsheet` prints a bounded escaped HTML table.
+
+Evidence: Chromium tests cover basic, 5,001-row, adversarial and empty payloads,
+including search, zoom, copy, cell edit and HTML-injection resistance.
+
+## PPTX — files did not open/render reliably
+
+### Root cause
+
+The old viewer used a `file:///android_asset/` origin with file access disabled
+and pushed the whole presentation into one enormous Base64
+`evaluateJavascript()` call. It rendered all slides into a fixed 800 px column,
+had no reliable slide navigation/search/theme/zoom integration, and no explicit
+renderer-crash recovery. Large or media-heavy packages were most likely to fail.
+
+### Current pipeline and fix
+
+1. `OoxmlDocumentHandler` validates the package and returns `PptxSuccess` with a
+   variant notice.
+2. `PptxPreviewWebView` streams bytes through `/pptx-src/presentation.pptx`,
+   hardens the WebView with `OfficeWebViewSecurity`, and waits for a non-zero
+   Compose layout before initialising pptx-preview.
+3. `pptx_editor.html` uses the library's slide mode, hides its duplicate
+   built-in controls, and exposes `nextSlide`, `prevSlide`, `goToSlide`,
+   `searchWord`, `next/prevSearchMatch`, `setZoom`, `setDarkMode` and
+   `setNotice`. Search uses a bounded OOXML text index, then highlights the
+   current slide and jumps to the matching slide.
+4. A failed formatted render degrades to a clearly labeled slide-text view; a
+   renderer-process loss becomes a retryable error state.
+5. `FilePrintHelper.printPptx` opens `?print=1` in list mode, waits for fonts and
+   `onPrintReady`, then creates the Android print adapter. The live viewer's
+   current-slide state is never used for print.
+
+Evidence: Chromium tests cover basic/variant/rich presentations, all eight
+slides in print mode with one image and one table, and corrupt-package errors.
+
+## Legacy Office and variants
+
+`LegacyOfficeFormatHandler` remains the single OLE2 route. `.doc` and `.ppt`
+use bounded Unicode text recovery through `OleTextRecovery`; `.xls` uses
+`Biff8XlsParser`. Encrypted `EncryptedPackage` OLE2 containers and `.xlsb` are
+not decoded. Macro-enabled and template OOXML variants are previewed read-only;
+macros are never executed. See [`FILE_FORMATS.md`](FILE_FORMATS.md) for the
+complete support matrix.
 
 ## Failure diagnosis checklist
 
 If a preview still fails on a built app:
 
-1. Record the file source (local path, external content intent, or archive entry), extension, byte size, and Android/WebView version. Do not share document contents or sensitive file paths in logs.
-2. For DOCX, note the visible recovery reason and inspect `WebViewDocx` logs for main-frame/resource errors. Confirm the WebView requests `/assets/editor/docx_editor.html`, both local renderer scripts, and `/docx-src/document.docx`.
-3. For PDF, inspect `PdfJsReader` logs and the JavaScript console for module/worker errors. Confirm `.mjs` responses are `text/javascript`, the worker is found, and the PDF endpoint receives expected ranges.
-4. Check the visible error state and retry behavior. Do not hide errors or silently present recovered text as formatted rendering.
-5. Re-test password-protected, malformed, large, and ordinary files only within existing capability and safety limits.
+1. Record file source, extension, byte size, Android/WebView version and the
+   visible error/retry state. Do not log document contents or private paths.
+2. Confirm the WebView requests only `/assets/...`, `/docx-src/...`,
+   `/pptx-src/...` or `/spreadsheet-src/...`; there should be no `file://` or
+   network requests.
+3. For DOCX/PPTX, confirm `notifyViewport()` received a non-zero width/height
+   and `onDocumentLoaded` arrived after visible content existed.
+4. For XLSX, confirm `data.json` is served with `application/json`, the grid
+   reports `onGridReady`, and a truncated payload is read-only.
+5. Check print readiness callbacks (`onPrintReady`) and Android print output for
+   DOCX, PPTX and spreadsheets.
+6. Re-test password-protected, malformed, large and ordinary files within the
+   documented limits.
 
-The current tool environment lacks Java and Android runtime tooling, so these runtime checks are still open. See [`SANITY_CHECKLIST.md`](SANITY_CHECKLIST.md) for the full existing-behavior matrix.
+The local environment has Chromium but no JDK/Android SDK/emulator. Android
+runtime checks remain open and are listed in [`STATUS.md`](STATUS.md) and
+[`SANITY_CHECKLIST.md`](SANITY_CHECKLIST.md).

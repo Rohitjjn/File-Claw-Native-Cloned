@@ -96,7 +96,7 @@ object FormatRegistry {
         spec("ods", "OpenDocument spreadsheet", FileKind.ODF, part, "application/vnd.oasis.opendocument.spreadsheet", "ods", "ots")
         spec("odp", "OpenDocument presentation", FileKind.ODF, part, "application/vnd.oasis.opendocument.presentation", "odp", "otp")
         spec("epub", "EPUB e-book", FileKind.EPUB, full, "application/epub+zip", "epub")
-        spec("ole2", "Legacy Microsoft Office (OLE2)", FileKind.LEGACY_OFFICE, ident, "application/x-ole-storage", "doc", "xls", "ppt", "msg", "vsd", "xlsb", "wps", "mpp")
+        spec("ole2", "Legacy Microsoft Office (OLE2)", FileKind.LEGACY_OFFICE, part, "application/x-ole-storage", "doc", "xls", "ppt", "msg", "vsd", "xlsb", "wps", "mpp")
 
         // ---- Images ----------------------------------------------------------------------
         spec("png", "PNG image", FileKind.IMAGE, full, "image/png", "png", "apng")

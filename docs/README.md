@@ -5,7 +5,7 @@ Start with [`../README.md`](../README.md) for a product overview and quick start
 ## Source maps
 
 - [Architecture](ARCHITECTURE.md) — package ownership, route flow, and test/assets locations.
-- [Preview pipelines](PREVIEW_PIPELINES.md) — current PDF/DOCX viewer paths, local WebView assets, and open runtime checks.
+- [Preview pipelines](PREVIEW_PIPELINES.md) — current PDF, DOCX, XLSX and PPTX viewer paths, root causes, local WebView assets, and open runtime checks.
 - [Supported formats](FILE_FORMATS.md) — source-derived registry IDs, extension aliases, and support metadata.
 - [Database and user data](DATABASE.md) — Room schema version, migration, and app backup behavior.
 - [Security](SECURITY.md) — permissions, archive limits, WebView boundaries, and data-safety rules.
@@ -15,9 +15,10 @@ Start with [`../README.md`](../README.md) for a product overview and quick start
 ## Build and work status
 
 - [Build guide](../BUILD_GUIDE.md) — toolchain requirements and exact Gradle tasks.
-- [Testing](TESTING.md) — test inventory and verification expectations.
+- [Testing](TESTING.md) — JVM test inventory, Office renderer tests, fixture coverage and current verification record.
+- [Office renderer test tools](../tools/office-preview-tests/README.md) — reproducible Chromium/validator commands and fixture licenses.
 - [Current status](STATUS.md) — exact checks run, blockers, and remaining acceptance checks.
-- [TODO](TODO.md) and [work sequence](ROADMAP.md) — active gates only; no new preview support is implied.
+- [TODO](TODO.md) and [work sequence](ROADMAP.md) — remaining runtime/CI gates and known Office limitations.
 - [Manual sanity checklist](SANITY_CHECKLIST.md) — device regression cases.
 - [Changelog](CHANGELOG.md) — changes made in the current documentation/preview task.
 - [Contributing](CONTRIBUTING.md) — source ownership, preservation, and truthful verification guidelines.

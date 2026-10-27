@@ -1,71 +1,56 @@
 # Current project and verification status
 
-**Documentation/source review date:** 2026-10-23. **Working branch:** `arena/29f255df-file-claw-native-cloned`. **Git base at task start:** `ec4d91ca50d51749429970bf8caf631cc1439db0`.
+**Source review date:** 2026-10-27. **Working branch:** `arena/10dfe1b6-file-claw-native-cloned`. **Base:** `008bd1b47734b16138193120556699b1c4499f18` (`main`). The selected checkout is `Rohitjjn/File-Claw-Native-Cloned`; the prompt also named `Rohitjjn/File-Claw-App-Native-Cloned`, which does not resolve as a GitHub repository. The session branch is fixed by Arena, so the requested `fix/office-preview-engines` branch was not created; all work and the PR remain on the pinned branch.
 
-This page is the current record of the active PDF/DOCX repair and documentation refresh. Source status and runtime verification are different: a success-state branch or a syntax check does not prove that Android WebView rendered a document.
+This status distinguishes source/browser verification from Android compilation and on-device testing. A green Chromium test is not an Android WebView test.
 
-## Current worktree changes
+## Implemented in this pass
 
-- A shared MIME-aware local asset handler now serves `.js` and `.mjs` files as `text/javascript` in PDF, DOCX, and DOCX print WebView asset-loader routes. This replaces the PDF handler's explicit `application/javascript` response and makes DOCX script MIME explicit instead of relying on platform extension mapping.
-- Moved the existing `PdfRangeResponder` into `formats/pdf/` to keep PDF-specific byte serving with the PDF family. Its response logic was not changed.
-- Added three local unit tests for JavaScript MIME selection and non-JavaScript pass-through. They have not been compiled or run.
-- Replaced stale project notes with source-based English documentation, including a new root `PERFORMANCE.md` that describes source limits and a measurement plan without claiming benchmark results. `THIRD_PARTY_NOTICES.md`, bundled assets/licenses, Gradle/app identity configuration, resources, Room implementation, and module structure were not changed by this documentation/preview pass. Existing architecture-migration edits were already present in the working tree and remain in scope.
-- The MIME change is a targeted WebView compatibility correction based on the local asset-loading path. The original preview failure has no captured runtime log here, so the root cause and user-visible resolution remain **unconfirmed** until an Android WebView check passes.
-- Archive-source review found a documentation-worthy gap: `ArchiveLimits.maxTotalBytes` is declared but not enforced. See [`SECURITY.md`](SECURITY.md); no archive implementation was changed.
+- Root-cause DOCX layout fix: Compose reports real WebView bounds via `notifyViewport`, `loadDocx` waits for a non-zero viewport, and visible-content confirmation remains. Print mode is preserved as the working diagnostic renderer.
+- Root-cause XLSX transport fix: removed whole-sheet Base64 `evaluateJavascript()` injection and `file:///android_asset/` script loading; added a bounded, virtualized, local-asset spreadsheet grid and atomic values-only save.
+- Rebuilt PPTX preview with streamed bytes, layout readiness, slide navigation, search, zoom/pan, dark mode, images/tables, text fallback and an all-slide print path.
+- Added shared OOXML validation/variant detection, hardened Office WebView settings, legacy PPT Unicode text recovery, Office MIME-aware sharing, and dedicated spreadsheet/presentation print paths.
+- Added OOXML, spreadsheet, presentation, legacy text and save unit tests; added a reproducible Office fixture corpus, independent Python OOXML validator, JavaScript syntax checks, headless Chromium renderer tests and a plain-JVM inspector harness.
+- Added an `Office Renderer Tests` GitHub Actions workflow with renderer/validator and `kotlin-inspector` jobs. Existing Android build/unit-test CI was left intact.
 
-## Checks completed
+## Checks actually run locally
 
-| Check | Result |
-|---|---|
-| JavaScript syntax for inline PDF/DOCX scripts and four bundled JS/MJS files | **PASS**: `node --check` passed for all 7 scripts after the MIME source change. |
-| Referenced preview assets | **PASS**: PDF.js main/worker MJS files and DOCX JSZip/renderer script files exist at the expected local paths. |
-| Manifest and resource XML parse | **PASS**: 14 files parsed successfully. |
-| Markdown links and obsolete-document references | **PASS** after adding `PERFORMANCE.md`: local links in 20 current Markdown files resolve; no references to removed legacy documents or prompts were found. |
-| `git diff --check` | **PASS**. |
-| `PERFORMANCE.md` policy arithmetic | **PASS as a source calculation only**: documented PDF RGBA figures match the per-page pixel tiers × 3-page target × 4 bytes/pixel. These are not runtime memory measurements. |
-| Protected configuration/assets/notices diff review | **PASS**: no diff in app/Gradle identity configuration, manifest/resources, schemas, bundled assets, licenses, or `THIRD_PARTY_NOTICES.md`. |
-| Production import/reference scan and PDF responder relocation | **PASS as a static source scan only** across 131 Kotlin production files; the PDF responder now has a PDF-family package and two expected call sites. Not a compiler check. |
-| Format metadata/handler-ID comparison from preceding migration review | **PASS as a static source comparison only**: 69 metadata IDs and 69 handler IDs; no missing/extra/multiply-owned IDs. Not an executed test. The registry still has 69 format groups; no new group was added. |
-| Test-source inventory | 36 Kotlin test files and 228 `@Test` annotations. This is an inventory count, not a passing test result. |
-| `tools/GenFormatDocs.kt` | Updated to match the inventory format, but **not compiled or run**. The table was rebuilt by parsing `FormatRegistry.kt`; it has not been validated against generator output. |
-| WebView runtime render | **NOT RUN**; no Android device/emulator or usable Android runtime was available. |
-| Kotlin/Gradle compile, unit tests, APK assembly, lint/detekt, Room migration test | **NOT RUN successfully**; Java/JDK blocker below. |
+| Check | Command / tool | Result |
+|---|---|---|
+| JavaScript syntax | `npm run syntax` in `tools/office-preview-tests` | **PASS**: `node --check` passed for 15 standalone/inline bundled scripts. |
+| Independent OOXML validation | `python3 validate_ooxml.py --fixtures fixtures --output results/ooxml-validation.json` | **PASS**: 27/27 expected outcomes; 0 failures. Path traversal, XXE, ZIP bomb, truncated/corrupt, misleading extension, encrypted OLE2 and external-rel fixtures behaved as expected. |
+| Bundled renderer regression | `npm test` with pinned `@sparticuz/chromium` 153.0.0 + `puppeteer-core` 25.16.0 | **PASS**: 18/18 tests, 0 failures, ~17 s. See `tools/office-preview-tests/results/renderer-tests.json`. |
+| Kotlin inspector JVM logic | `tools/office-preview-tests/kotlin-inspector-jvm/run.sh` with JDK 17.0.8 + Kotlin 1.9.22 | **PASS**: 27/27 cases, 0 failures. Compiles the real `OoxmlPackageInspector.kt` against a tiny ZIP metadata shim. See `tools/office-preview-tests/results/kotlin-inspector-jvm.json`. |
+| Pure-Kotlin JVM logic smoke test | One-off Kotlin 1.9.22 compile of 9 dependency-free production files + 23 assertions | **PASS**: 0 failures. Covers spreadsheet bounds/JSON, zoom/search policies, HTML escaping, legacy text recovery, OLE2 stream reading and legacy DOC/PPT extractors. Local harness not committed; Gradle unit tests cover these areas. |
+| Kotlin PSI syntax parse | Kotlin 1.9.22 PSI over all 181 Kotlin source files | **PASS**: 0 syntax-error nodes. Parser check only; not type checking or a Gradle build. |
+| DOCX late-layout reproduction | Chromium: 1×1 viewport → 390×844 with `ResizeObserver` deleted | **PASS**: visible 366×474 first page; `onDocumentLoaded(1)`, no bridge errors. |
+| DOCX print diagnostic | Chromium `?print=1` | **PASS**: `onPrintReady` fired, 793 px page, no errors. |
+| PPTX rich print | Chromium `rich.pptx` `?print=1` | **PASS**: 8 slide wrappers, 1 image, 1 table, `onPrintReady`. |
+| Spreadsheet virtualization | Chromium 5,001-row payload | **PASS**: 125 visible DOM cells, ~2.58 MiB JS heap in the isolated browser process; no crash. Basic/adversarial/empty payloads also passed. |
+| Heavy/adversarial DOCX | Chromium matrix: rich, variants, XXE/traversal, external rel, truncated, corrupt, 50 MiB ZIP bomb, misleading extension | **PASS as browser asset behavior**: variants rendered; malformed/bomb packages produced explicit errors; no `/etc/passwd` expansion; no external requests. Production `OoxmlPackageInspector` rejects the hostile packages before the renderer. |
+| `git diff --check` | local Git | **PASS** after final local edits. |
+| Kotlin/Gradle compile, JVM unit tests, APK assembly, lint/detekt | `./gradlew ...` | **NOT RUN LOCALLY**; **PASS IN CI** for `assembleDebug`, `assembleRelease` (R8 + `lintVitalRelease`) and `testDebugUnitTest`. `lintDebug`, `detekt` and `jacocoCoreVerify` were not run locally or in CI. Android SDK, Gradle distribution/dependencies, emulator and ADB are absent locally; a task-local JDK 17 was installed only for the JVM-inspector and pure-Kotlin harnesses. |
+| Android WebView / PrintManager / device | emulator/device | **NOT RUN**: no Android runtime available in this environment. |
 
-## Exact Gradle results
+## CI status
 
-Baseline attempts before the MIME source change:
+Observed on PR [#8](https://github.com/Rohitjjn/File-Claw-Native-Cloned/pull/8) after the final commit:
 
-```text
-./gradlew :app:compileDebugKotlin :app:testDebugUnitTest :app:assembleDebug --no-daemon --max-workers=1
-./gradlew lintDebug detekt --no-daemon --max-workers=1
-```
+- `Android Build Verification` / **Compile debug and minified release; run unit tests**: **PASS** (6m 8s). Debug and minified release APKs built; all JVM unit tests passed.
+- `Office Renderer Tests` / **Validate OOXML fixtures and bundled renderer assets**: **PASS** (32s).
+- `Office Renderer Tests` / **Exercise the Kotlin OOXML package inspector on a JVM**: **PASS** (24s).
 
-Post-change attempts:
-
-```text
-./gradlew :app:compileDebugKotlin :app:testDebugUnitTest :app:assembleDebug --no-daemon --max-workers=1
-./gradlew lintDebug detekt --no-daemon --max-workers=1
-./gradlew :app:jacocoCoreVerify --no-daemon --max-workers=1
-```
-
-Each command exited with status 1 **before Gradle started**. The exact blocker was:
-
-```text
-ERROR: JAVA_HOME is not set and no 'java' command could be found in your PATH.
-```
-
-No compilation, unit tests, APK assembly, lint, detekt, coverage task, or Room migration test has a passing result. Rerun the gates on a machine with JDK 17 and Android SDK 34. A pre-existing `build.log` belongs to another environment and is not evidence for this worktree.
-
-## Database note
-
-`AppDatabase` source is version **4** and defines `MIGRATION_3_4`. The checked-in `app/schemas/` directory contains only schema `3.json`; the v4 export was absent during review. Verify Room/KSP schema generation and run `DatabaseMigrationTest` in the next successful Gradle run. No database version or migration was changed in this task.
+Two earlier CI iterations failed: the first exposed three Kotlin compile errors (fixed), the second exposed four JVM unit-test assertions (fixed). No CI result is claimed for `lintDebug`, `detekt`, `jacocoCoreVerify` or on-device behavior.
 
 ## Remaining acceptance checks
 
-- Build and run on an emulator/device, then open ordinary DOCX and PDF files from app storage, an external file intent, and a ZIP entry.
-- Confirm the DOCX page, both local scripts, and `/docx-src/document.docx` load; formatted content appears rather than only extracted text; search, zoom, dark-mode behavior, retry/recovery, and existing print remain intact.
-- Confirm PDF.js main module and worker load with the explicit JavaScript MIME type; open a real PDF; check page rendering, password/error states, range loading, search, rotation, zoom, and print/share.
-- Record actual Android/WebView version, file size/source category, visible error, and relevant `WebViewDocx`/`PdfJsReader` logs without logging document contents.
-- Run the post-change compile, unit tests, assemble, lint/detekt, and core coverage task on a configured machine. Record each separately.
+- On a JDK 17 + Android SDK 34 machine, run:
+  - `./gradlew :app:compileDebugKotlin --no-daemon --max-workers=1`
+  - `./gradlew :app:testDebugUnitTest --no-daemon --max-workers=1`
+  - `./gradlew :app:assembleDebug :app:assembleRelease --no-daemon --max-workers=1`
+  - `./gradlew :app:lintDebug :app:detekt --no-daemon --max-workers=1`
+- Install the debug APK on an emulator/device and open every supported format from local storage, an external content intent and a ZIP entry. Confirm `WebViewAssetLoader` requests, no `file://`/network requests, search/jump/zoom, dark/light themes, orientation, back/retry, print/export, share and safe save.
+- Record Android System WebView version, file size/source category, visible error and relevant logs without logging document text or private paths.
+- Measure on-device time-to-first-content and peak memory for the large fixtures; browser heap figures above are not Android app heap measurements.
 
-See [`TODO.md`](TODO.md) and [`SANITY_CHECKLIST.md`](SANITY_CHECKLIST.md) for the next steps and broader manual regression list.
+See [`TESTING.md`](TESTING.md), [`PREVIEW_PIPELINES.md`](PREVIEW_PIPELINES.md), [`SECURITY.md`](SECURITY.md) and [`TODO.md`](TODO.md).

@@ -1,0 +1,95 @@
+name: Office Renderer Tests
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: office-renderer-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  renderer:
+    name: Validate OOXML fixtures and bundled renderer assets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: tools/office-preview-tests/package-lock.json
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install renderer test dependencies
+        working-directory: tools/office-preview-tests
+        run: npm ci --no-audit --no-fund
+
+      - name: Check JavaScript syntax
+        working-directory: tools/office-preview-tests
+        run: npm run syntax
+
+      - name: Validate OOXML test corpus
+        working-directory: tools/office-preview-tests
+        run: python3 validate_ooxml.py --fixtures fixtures --output results/ooxml-validation.json
+
+      - name: Run headless Chromium renderer tests
+        working-directory: tools/office-preview-tests
+        run: npm test
+
+      - name: Upload renderer evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: office-renderer-results
+          path: tools/office-preview-tests/results/
+          if-no-files-found: ignore
+
+  kotlin-inspector:
+    name: Exercise the Kotlin OOXML package inspector on a JVM
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install a standalone Kotlin compiler
+        run: |
+          mkdir -p "$RUNNER_TEMP/kotlin"
+          npm install --prefix "$RUNNER_TEMP/kotlin" --ignore-scripts --no-audit --no-fund kotlin-compiler@1.9.22
+          echo "KOTLINC=$RUNNER_TEMP/kotlin/node_modules/kotlin-compiler/bin/kotlinc" >> "$GITHUB_ENV"
+
+      - name: Run the OOXML inspector JVM harness
+        run: |
+          tools/office-preview-tests/kotlin-inspector-jvm/run.sh \
+            tools/office-preview-tests/fixtures \
+            tools/office-preview-tests/results/kotlin-inspector-jvm.json
+
+      - name: Upload Kotlin inspector evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: office-kotlin-inspector-results
+          path: tools/office-preview-tests/results/kotlin-inspector-jvm.json
+          if-no-files-found: ignore

@@ -8,6 +8,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -123,6 +125,8 @@ import com.example.ui.component.DocumentOutlineParser
 import com.example.ui.component.ViewerSyntaxTheme
 import com.example.ui.component.ViewerAppearancePrefs
 import com.example.formats.docx.DocxZoomPolicy
+import com.example.formats.pptx.PresentationZoomPolicy
+import com.example.formats.xlsx.ui.XlsxSheetPreview
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.foundation.text.KeyboardActions
@@ -417,6 +421,26 @@ fun FilePreviewScreen(
     // WebView zoom pipeline does not exist there, so dead zoom controls must be hidden.
     var isDocxRenderFallback by remember(activeFile?.path) { mutableStateOf(false) }
 
+    // Presentation and spreadsheet viewer state. Both use the same floating
+    // pill, find bar and overflow menu as the existing PDF/DOCX viewers.
+    var currentPptxSlide by remember(activeFile?.path) { mutableIntStateOf(1) }
+    var totalPptxSlides by remember(activeFile?.path) { mutableIntStateOf(0) }
+    var pptxPreviewWebView by remember { mutableStateOf<android.webkit.WebView?>(null) }
+    var pptxPreviewReady by remember(activeFile?.path) { mutableStateOf(false) }
+    var isPptxRenderFallback by remember(activeFile?.path) { mutableStateOf(false) }
+    var pptxZoomFactor by remember(activeFile?.path) {
+        mutableFloatStateOf(PresentationZoomPolicy.DEFAULT_ZOOM)
+    }
+    var pptxZoomInput by remember(activeFile?.path) { mutableStateOf("100") }
+    var showPptxZoomDialog by remember { mutableStateOf(false) }
+    var pptxGoToSlide by remember { mutableStateOf<Int?>(null) }
+    var pptxGoToSlideToken by remember { mutableIntStateOf(0) }
+    var spreadsheetZoomFactor by remember(activeFile?.path) { mutableFloatStateOf(1f) }
+    var spreadsheetWebView by remember { mutableStateOf<android.webkit.WebView?>(null) }
+    var spreadsheetReady by remember(activeFile?.path) { mutableStateOf(false) }
+    var showGoToCellDialog by remember { mutableStateOf(false) }
+    var goToCellInput by remember { mutableStateOf("") }
+
     LaunchedEffect(activeFile?.path) {
         isBarsVisible = true
         inViewerSearchQuery = ""
@@ -437,6 +461,20 @@ fun FilePreviewScreen(
         searchTriggerNext = 0
         searchTriggerPrev = 0
         isDocxRenderFallback = false
+        currentPptxSlide = 1
+        totalPptxSlides = 0
+        pptxPreviewWebView = null
+        pptxPreviewReady = false
+        isPptxRenderFallback = false
+        pptxZoomFactor = PresentationZoomPolicy.DEFAULT_ZOOM
+        pptxZoomInput = "100"
+        pptxGoToSlide = null
+        pptxGoToSlideToken = 0
+        spreadsheetZoomFactor = 1f
+        spreadsheetWebView = null
+        spreadsheetReady = false
+        showGoToCellDialog = false
+        goToCellInput = ""
     }
 
     val context = LocalContext.current
@@ -697,12 +735,15 @@ fun FilePreviewScreen(
             // so the status-bar canvas follows the system theme for PDFs again.
             val isDarkCanvas = when (activeFile?.extension?.lowercase()) {
                 "pdf" -> isDarkTheme
-                "docx", "doc" -> isDocxNightMode
+                "docx", "doc", "docm", "dotx", "dotm",
+                "pptx", "pptm", "ppsx", "potx", "potm" -> isDocxNightMode
                 else -> isDarkTheme
             }
             val canvasColor = when (activeFile?.extension?.lowercase()) {
                 "pdf" -> android.graphics.Color.rgb(240, 240, 240)
-                "docx", "doc" -> if (isDocxNightMode) android.graphics.Color.rgb(21, 21, 20) else android.graphics.Color.rgb(250, 249, 245)
+                "docx", "doc", "docm", "dotx", "dotm",
+                "pptx", "pptm", "ppsx", "potx", "potm" ->
+                    if (isDocxNightMode) android.graphics.Color.rgb(21, 21, 20) else android.graphics.Color.rgb(250, 249, 245)
                 else -> if (isDarkTheme) android.graphics.Color.rgb(24, 23, 21) else android.graphics.Color.rgb(250, 249, 245)
             }
             window.decorView.setBackgroundColor(canvasColor)
@@ -897,11 +938,18 @@ fun FilePreviewScreen(
                                     )
                                 }
 
-                                val isPdf = activeFile?.extension?.lowercase() == "pdf"
-                                val isDocx = activeFile?.extension?.lowercase() in setOf("docx", "doc")
-                                if (isPdf || isDocx) {
+                                val isPdf = fileState is FileContentState.PdfSuccess
+                                val isDocxFile = fileState is FileContentState.DocxSuccess
+                                val isPptxFile = fileState is FileContentState.PptxSuccess
+                                val isSpreadsheetFile = fileState is FileContentState.CsvSuccess
+                                if (isPdf || isDocxFile || isPptxFile) {
                                     DropdownMenuItem(
-                                        text = { Text("Go to Page ($currentPdfPage / $totalPdfPages)") },
+                                        text = {
+                                            Text(
+                                                if (isPptxFile) "Go to Slide ($currentPptxSlide / $totalPptxSlides)"
+                                                else "Go to Page ($currentPdfPage / $totalPdfPages)"
+                                            )
+                                        },
                                         onClick = {
                                             showMenu = false
                                             showJumpDialog = true
@@ -909,13 +957,10 @@ fun FilePreviewScreen(
                                         leadingIcon = {
                                             Icon(
                                                 imageVector = Icons.Default.InsertDriveFile,
-                                                contentDescription = "Go to Page"
+                                                contentDescription = if (isPptxFile) "Go to Slide" else "Go to Page"
                                             )
                                         }
                                     )
-                                    // Loop 14: the PDF night/light toggle was removed entirely —
-                                    // PDFs always render in light mode. Dark mode remains for
-                                    // DOCX/TXT/Markdown and other file types.
                                     if (!isPdf) {
                                         DropdownMenuItem(
                                             text = { Text(if (isDocxNightMode) "Light Mode" else "Dark Mode") },
@@ -949,6 +994,19 @@ fun FilePreviewScreen(
                                         )
                                     }
                                 }
+                                if (isSpreadsheetFile) {
+                                    DropdownMenuItem(
+                                        text = { Text("Go to Cell…") },
+                                        onClick = {
+                                            showMenu = false
+                                            goToCellInput = ""
+                                            showGoToCellDialog = true
+                                        },
+                                        leadingIcon = {
+                                            Icon(Icons.Outlined.InsertDriveFile, contentDescription = "Go to Cell")
+                                        }
+                                    )
+                                }
 
                                 val hasOutline = activeFile?.extension?.lowercase() in setOf("md", "markdown", "txt") && !isEditMode
                                 if (hasOutline) {
@@ -967,7 +1025,8 @@ fun FilePreviewScreen(
                                     )
                                 }
 
-                                val isTextFile = activeFile?.extension?.lowercase() in setOf("txt", "md", "json", "xml", "html", "htm", "js", "ts", "css", "log", "yaml", "yml", "ini", "conf", "sh", "py", "java", "kt", "c", "cpp", "h", "sql", "csv", "tsv")
+                                val isTextFile = fileState is FileContentState.TextSuccess &&
+                                    activeFile?.extension?.lowercase() in setOf("txt", "md", "json", "xml", "html", "htm", "js", "ts", "css", "log", "yaml", "yml", "ini", "conf", "sh", "py", "java", "kt", "c", "cpp", "h", "sql")
                                 if (isTextFile) {
                                     DropdownMenuItem(
                                         text = { Text("Viewer Appearance") },
@@ -1004,20 +1063,27 @@ fun FilePreviewScreen(
                                         showMenu = false
                                         activeFile?.let { entity ->
                                             val ext = entity.extension.lowercase()
+                                            val printSpreadsheetState = fileState as? FileContentState.CsvSuccess
+                                            val printTextState = fileState as? FileContentState.TextSuccess
                                             when {
-                                                ext == "pdf" -> {
+                                                fileState is FileContentState.PdfSuccess -> {
                                                     com.example.platform.print.FilePrintHelper.printPdf(context, java.io.File(entity.path), entity.name)
                                                 }
-                                                ext in setOf("docx", "doc") -> {
+                                                fileState is FileContentState.DocxSuccess -> {
                                                     // Always print through the dedicated ?print=1 renderer, never the
-                                                    // on-screen viewer: the live WebView carries the reader's current
-                                                    // zoom (CSS `zoom`, often well under 100% to fit the screen) and
-                                                    // possible dark-mode colors, neither of which the print pipeline
-                                                    // re-fits to the page -- that is what made printed DOCX files come
-                                                    // out shrunk/odd-colored (reported as "like plain text"). The
-                                                    // dedicated renderer waits for fonts/images and fits every section
-                                                    // to the printable A4 width before a single page is submitted.
+                                                    // live on-screen WebView with its fit-to-width zoom/dark styling.
                                                     com.example.platform.print.FilePrintHelper.printDocx(context, java.io.File(entity.path), entity.name)
+                                                }
+                                                fileState is FileContentState.PptxSuccess -> {
+                                                    com.example.platform.print.FilePrintHelper.printPptx(context, java.io.File(entity.path), entity.name)
+                                                }
+                                                fileState is FileContentState.CsvSuccess -> {
+                                                    com.example.platform.print.FilePrintHelper.printSpreadsheet(
+                                                        context,
+                                                        printSpreadsheetState?.rows.orEmpty(),
+                                                        printSpreadsheetState?.sheetName,
+                                                        entity.name
+                                                    )
                                                 }
                                                 ext == "md" || ext == "txt" -> {
                                                     val textState = fileState as? FileContentState.TextSuccess
@@ -1048,10 +1114,17 @@ fun FilePreviewScreen(
                                                 ext in setOf("png", "jpg", "jpeg", "webp", "gif") -> {
                                                     com.example.platform.print.FilePrintHelper.printImage(context, java.io.File(entity.path), entity.name)
                                                 }
+                                                fileState is FileContentState.TextSuccess -> {
+                                                    // Covers read-only legacy DOC/PPT text recovery without
+                                                    // attempting to print the original binary as text.
+                                                    com.example.platform.print.FilePrintHelper.printTextOrMarkdown(
+                                                        context,
+                                                        printTextState?.content.orEmpty(),
+                                                        entity.name
+                                                    )
+                                                }
                                                 else -> {
-                                                    // The four document formats have bounded/dedicated branches above; preserve legacy fallback for other types.
-                                                    val content = (fileState as? FileContentState.TextSuccess)?.content
-                                                        ?: runCatching { java.io.File(entity.path).readText() }.getOrNull() ?: ""
+                                                    val content = runCatching { java.io.File(entity.path).readText() }.getOrNull() ?: ""
                                                     com.example.platform.print.FilePrintHelper.printTextOrMarkdown(context, content, entity.name)
                                                 }
                                             }
@@ -1107,11 +1180,13 @@ fun FilePreviewScreen(
             // Gate on the real state: legacy .doc files open in the hex viewer and must not
             // show DOCX zoom controls.
             val isDocx = fileState is FileContentState.DocxSuccess
+            val isPptx = fileState is FileContentState.PptxSuccess
+            val isSpreadsheet = fileState is FileContentState.CsvSuccess
             val isImage = fileState is FileContentState.ImageSuccess
-            val isText = fileState is FileContentState.TextSuccess ||
-                (activeFile?.extension?.lowercase() in setOf("txt", "md", "json", "xml", "html", "htm", "js", "ts", "css", "log", "yaml", "yml", "ini", "conf", "sh", "py", "java", "kt", "c", "cpp", "h", "sql", "csv", "tsv"))
+            val isText = fileState is FileContentState.TextSuccess &&
+                (activeFile?.extension?.lowercase() in setOf("txt", "md", "json", "xml", "html", "htm", "js", "ts", "css", "log", "yaml", "yml", "ini", "conf", "sh", "py", "java", "kt", "c", "cpp", "h", "sql"))
 
-            val showFloatingBar = isPdf || isDocx || isImage || isText
+            val showFloatingBar = isPdf || isDocx || isPptx || isSpreadsheet || isImage || isText
 
             if (showFloatingBar) {
                 androidx.compose.animation.AnimatedVisibility(
@@ -1155,7 +1230,9 @@ fun FilePreviewScreen(
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                                modifier = Modifier
+                                    .horizontalScroll(rememberScrollState())
+                                    .padding(horizontal = 8.dp, vertical = 6.dp)
                             ) {
                                 if (isPdf) {
                                     // Page indicator / Jump button
@@ -1358,6 +1435,118 @@ fun FilePreviewScreen(
                                             modifier = Modifier.size(18.dp),
                                             tint = MaterialTheme.colorScheme.onSurface
                                         )
+                                    }
+                                } else if (isPptx) {
+                                    IconButton(
+                                        onClick = { pptxPreviewWebView?.evaluateJavascript("prevSlide();", null) },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Previous slide", modifier = Modifier.size(18.dp))
+                                    }
+                                    Surface(
+                                        shape = RoundedCornerShape(18.dp),
+                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+                                        modifier = Modifier.clickable { showJumpDialog = true }
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                        ) {
+                                            Icon(Icons.Default.MenuBook, contentDescription = "Slide indicator", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                                            Spacer(Modifier.width(6.dp))
+                                            Text("$currentPptxSlide / ${totalPptxSlides.coerceAtLeast(1)}", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                    IconButton(
+                                        onClick = { pptxPreviewWebView?.evaluateJavascript("nextSlide();", null) },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Next slide", modifier = Modifier.size(18.dp))
+                                    }
+                                    if (!isPptxRenderFallback) {
+                                        IconButton(onClick = {
+                                            pptxZoomFactor = PresentationZoomPolicy.coerce(pptxZoomFactor - 0.25f)
+                                            pptxZoomInput = PresentationZoomPolicy.toPercent(pptxZoomFactor).toString()
+                                        }, modifier = Modifier.size(36.dp)) {
+                                            Icon(Icons.Outlined.ZoomOut, contentDescription = "Zoom out", modifier = Modifier.size(18.dp))
+                                        }
+                                        Surface(
+                                            shape = RoundedCornerShape(16.dp),
+                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                            modifier = Modifier.clickable {
+                                                pptxZoomInput = PresentationZoomPolicy.toPercent(pptxZoomFactor).toString()
+                                                showPptxZoomDialog = true
+                                            }
+                                        ) {
+                                            Text("${PresentationZoomPolicy.toPercent(pptxZoomFactor)}%", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                                        }
+                                        IconButton(onClick = {
+                                            pptxZoomFactor = PresentationZoomPolicy.coerce(pptxZoomFactor + 0.25f)
+                                            pptxZoomInput = PresentationZoomPolicy.toPercent(pptxZoomFactor).toString()
+                                        }, modifier = Modifier.size(36.dp)) {
+                                            Icon(Icons.Outlined.ZoomIn, contentDescription = "Zoom in", modifier = Modifier.size(18.dp))
+                                        }
+                                    }
+                                    IconButton(onClick = { toggleInViewerSearch() }, modifier = Modifier.size(36.dp)) {
+                                        Icon(Icons.Outlined.Search, contentDescription = "Find in presentation", modifier = Modifier.size(18.dp), tint = if (isSearchInDocumentOpen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                                    }
+                                    IconButton(onClick = { isDocxNightMode = !isDocxNightMode }, modifier = Modifier.size(36.dp)) {
+                                        Icon(if (isDocxNightMode) Icons.Default.LightMode else Icons.Default.DarkMode, contentDescription = "Toggle theme", modifier = Modifier.size(18.dp))
+                                    }
+                                    IconButton(onClick = {
+                                        activeFile?.let { com.example.platform.print.FilePrintHelper.printPptx(context, File(it.path), it.name) }
+                                    }, modifier = Modifier.size(36.dp)) {
+                                        Icon(Icons.Outlined.Print, contentDescription = "Print or export as PDF", modifier = Modifier.size(18.dp))
+                                    }
+                                    IconButton(onClick = {
+                                        activeFile?.let { FileShareHelper.share(context, File(it.path), it.extension) }
+                                    }, modifier = Modifier.size(36.dp)) {
+                                        Icon(Icons.Outlined.Share, contentDescription = "Share presentation", modifier = Modifier.size(18.dp))
+                                    }
+                                } else if (isSpreadsheet) {
+                                    val spreadsheetState = fileState as? FileContentState.CsvSuccess
+                                    IconButton(onClick = {
+                                        spreadsheetZoomFactor = (spreadsheetZoomFactor - 0.25f).coerceIn(0.5f, 3f)
+                                    }, modifier = Modifier.size(36.dp)) {
+                                        Icon(Icons.Outlined.ZoomOut, contentDescription = "Zoom out", modifier = Modifier.size(18.dp))
+                                    }
+                                    Surface(
+                                        shape = RoundedCornerShape(16.dp),
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                        modifier = Modifier.clickable { spreadsheetZoomFactor = 1f }
+                                    ) {
+                                        Text("${(spreadsheetZoomFactor * 100).toInt()}%", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                                    }
+                                    IconButton(onClick = {
+                                        spreadsheetZoomFactor = (spreadsheetZoomFactor + 0.25f).coerceIn(0.5f, 3f)
+                                    }, modifier = Modifier.size(36.dp)) {
+                                        Icon(Icons.Outlined.ZoomIn, contentDescription = "Zoom in", modifier = Modifier.size(18.dp))
+                                    }
+                                    IconButton(onClick = { toggleInViewerSearch() }, modifier = Modifier.size(36.dp)) {
+                                        Icon(Icons.Outlined.Search, contentDescription = "Find in sheet", modifier = Modifier.size(18.dp), tint = if (isSearchInDocumentOpen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                                    }
+                                    IconButton(onClick = { showGoToCellDialog = true }, modifier = Modifier.size(36.dp)) {
+                                        Icon(Icons.Outlined.InsertDriveFile, contentDescription = "Go to cell", modifier = Modifier.size(18.dp))
+                                    }
+                                    IconButton(onClick = { spreadsheetWebView?.evaluateJavascript("copySelection();", null) }, modifier = Modifier.size(36.dp)) {
+                                        Icon(Icons.Outlined.ContentCopy, contentDescription = "Copy selected cell", modifier = Modifier.size(18.dp))
+                                    }
+                                    IconButton(onClick = {
+                                        activeFile?.let { entity ->
+                                            com.example.platform.print.FilePrintHelper.printSpreadsheet(
+                                                context,
+                                                spreadsheetState?.rows.orEmpty(),
+                                                spreadsheetState?.sheetName,
+                                                entity.name
+                                            )
+                                        }
+                                    }, modifier = Modifier.size(36.dp)) {
+                                        Icon(Icons.Outlined.Print, contentDescription = "Print or export as PDF", modifier = Modifier.size(18.dp))
+                                    }
+                                    IconButton(onClick = {
+                                        activeFile?.let { FileShareHelper.share(context, File(it.path), it.extension) }
+                                    }, modifier = Modifier.size(36.dp)) {
+                                        Icon(Icons.Outlined.Share, contentDescription = "Share spreadsheet", modifier = Modifier.size(18.dp))
                                     }
                                 } else if (isImage) {
                                     // Image counter
@@ -1715,7 +1904,11 @@ fun FilePreviewScreen(
         containerColor = MaterialTheme.colorScheme.background,
         modifier = modifier.testTag("file_preview_screen")
     ) { innerPadding ->
-        val usesReaderGestures = activeFile?.extension?.lowercase() in setOf("pdf", "doc", "docx", "txt", "md")
+        val usesReaderGestures = fileState is FileContentState.PdfSuccess ||
+            fileState is FileContentState.DocxSuccess ||
+            fileState is FileContentState.PptxSuccess ||
+            fileState is FileContentState.CsvSuccess ||
+            activeFile?.extension?.lowercase() in setOf("doc", "txt", "md")
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -1952,16 +2145,56 @@ fun FilePreviewScreen(
                     }
                 }
                 is FileContentState.CsvSuccess -> {
-                    CsvPreview(
-                        csvRows = state.rows,
-                        fileEntity = state.file,
-                        viewModel = viewModel,
-                        editable = state.editable,
-                        notice = state.readOnlyReason
-                            ?: if (state.truncated) "Large file: showing the first ${state.rows.size} rows. Read-only, so nothing is lost on save." else null,
-                        onDiscardAndExit = { handleBack() },
-                        modifier = Modifier.fillMaxSize()
-                    )
+                    val isWorkbook = state.sheetName != null ||
+                        state.file.extension.lowercase() in setOf("xlsx", "xlsm", "xltx", "xltm")
+                    val spreadsheetNotice = state.readOnlyReason
+                        ?: if (state.truncated) "Large file: showing the first ${state.rows.size} rows. Read-only, so nothing is lost on save." else null
+                    val commonSearchCount: (Int, Int, Boolean) -> Unit = { count, index, truncated ->
+                        totalMatchesCount = count
+                        currentMatchIndex = if (count > 0) index.coerceAtLeast(0) else 0
+                        searchResultsTruncated = truncated
+                    }
+                    if (isWorkbook) {
+                        XlsxSheetPreview(
+                            rows = state.rows,
+                            fileEntity = state.file,
+                            sheetName = state.sheetName,
+                            viewModel = viewModel,
+                            editable = state.editable,
+                            notice = spreadsheetNotice,
+                            onDiscardAndExit = { handleBack() },
+                            modifier = Modifier.fillMaxSize(),
+                            searchQuery = inViewerSearchQuery,
+                            searchTriggerNext = searchTriggerNext,
+                            searchTriggerPrev = searchTriggerPrev,
+                            onSearchResultCount = commonSearchCount,
+                            zoomFactor = spreadsheetZoomFactor,
+                            onZoomChanged = { factor -> spreadsheetZoomFactor = factor.coerceIn(0.5f, 3f) },
+                            onWebViewCreated = { spreadsheetWebView = it },
+                            onReady = { spreadsheetReady = true },
+                            onSingleTap = { isBarsVisible = !isBarsVisible }
+                        )
+                    } else {
+                        CsvPreview(
+                            csvRows = state.rows,
+                            fileEntity = state.file,
+                            viewModel = viewModel,
+                            editable = state.editable,
+                            notice = spreadsheetNotice,
+                            onDiscardAndExit = { handleBack() },
+                            modifier = Modifier.fillMaxSize(),
+                            sheetName = state.sheetName,
+                            searchQuery = inViewerSearchQuery,
+                            searchTriggerNext = searchTriggerNext,
+                            searchTriggerPrev = searchTriggerPrev,
+                            onSearchResultCount = commonSearchCount,
+                            zoomFactor = spreadsheetZoomFactor,
+                            onZoomChanged = { factor -> spreadsheetZoomFactor = factor.coerceIn(0.5f, 3f) },
+                            onWebViewCreated = { spreadsheetWebView = it },
+                            onReady = { spreadsheetReady = true },
+                            onSingleTap = { isBarsVisible = !isBarsVisible }
+                        )
+                    }
                 }
                 is FileContentState.ZipSuccess -> {
                     ZipPreview(
@@ -2021,6 +2254,7 @@ fun FilePreviewScreen(
                         isNightMode = isDocxNightMode,
                         viewModel = viewModel,
                         modifier = Modifier.fillMaxSize(),
+                        notice = state.notice,
                         onPageChanged = { page, total ->
                             currentPdfPage = page
                             totalPdfPages = total
@@ -2049,8 +2283,31 @@ fun FilePreviewScreen(
                     PptxPreviewWebView(
                         fileEntity = state.file,
                         isNightMode = isDocxNightMode,
+                        notice = state.notice,
                         viewModel = viewModel,
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.fillMaxSize(),
+                        onSlideChanged = { slide, total ->
+                            currentPptxSlide = slide
+                            totalPptxSlides = total
+                        },
+                        goToSlide = pptxGoToSlide,
+                        goToSlideToken = pptxGoToSlideToken,
+                        onGoToSlideHandled = { pptxGoToSlide = null },
+                        searchQuery = inViewerSearchQuery,
+                        searchTriggerNext = searchTriggerNext,
+                        searchTriggerPrev = searchTriggerPrev,
+                        onSearchResultCount = { count, index, truncated ->
+                            totalMatchesCount = count
+                            currentMatchIndex = if (count > 0) index.coerceAtLeast(0) else 0
+                            searchResultsTruncated = truncated
+                        },
+                        zoomFactor = pptxZoomFactor,
+                        onZoomChanged = { factor -> pptxZoomFactor = PresentationZoomPolicy.coerce(factor) },
+                        onWebViewCreated = { pptxPreviewWebView = it },
+                        onReady = { pptxPreviewReady = true },
+                        onSingleTap = { isBarsVisible = !isBarsVisible },
+                        onDoubleTap = { isBarsVisible = false },
+                        onRendererFallback = { isFallback -> isPptxRenderFallback = isFallback }
                     )
                 }
                 is FileContentState.MediaSuccess -> {
@@ -2156,18 +2413,29 @@ fun FilePreviewScreen(
     }
 
     if (showJumpDialog) {
-        var pageInput by remember { mutableStateOf("") }
+        val isPptxJump = fileState is FileContentState.PptxSuccess
+        val maxPage = (if (isPptxJump) totalPptxSlides else totalPdfPages).coerceAtLeast(1)
+        var pageInput by remember(showJumpDialog) { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { showJumpDialog = false },
             confirmButton = {
                 Button(
                     onClick = {
                         val pNum = pageInput.toIntOrNull()
-                        if (pNum != null && pNum in 1..totalPdfPages) {
-                            scrollToPage = pNum - 1
-                            pageJumpToken++
+                        if (pNum != null && pNum in 1..maxPage) {
+                            if (isPptxJump) {
+                                pptxGoToSlide = pNum
+                                pptxGoToSlideToken++
+                            } else {
+                                scrollToPage = pNum - 1
+                                pageJumpToken++
+                            }
                         } else {
-                            android.widget.Toast.makeText(context, "Invalid page number", android.widget.Toast.LENGTH_SHORT).show()
+                            android.widget.Toast.makeText(
+                                context,
+                                "Invalid ${if (isPptxJump) "slide" else "page"} number",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
                         }
                         showJumpDialog = false
                     }
@@ -2180,14 +2448,14 @@ fun FilePreviewScreen(
                     Text("Cancel")
                 }
             },
-            title = { Text("Go to Page") },
+            title = { Text(if (isPptxJump) "Go to Slide" else "Go to Page") },
             text = {
                 Column {
-                    Text("Enter page number (1 to $totalPdfPages):")
+                    Text("Enter ${if (isPptxJump) "slide" else "page"} number (1 to $maxPage):")
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = pageInput,
-                        onValueChange = { pageInput = it.filter { char -> char.isDigit() } },
+                        onValueChange = { pageInput = it.filter { char -> char.isDigit() }.take(4) },
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                             keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
                         ),
@@ -2244,6 +2512,101 @@ fun FilePreviewScreen(
                     docxZoomFactor = 1.0f
                     docxZoomInput = "100"
                 }) { Text("Reset 100%") }
+            }
+        )
+    }
+
+    if (showPptxZoomDialog) {
+        AlertDialog(
+            onDismissRequest = { showPptxZoomDialog = false },
+            title = { Text("Presentation zoom") },
+            text = {
+                Column {
+                    Text("${PresentationZoomPolicy.toPercent(pptxZoomFactor)}%", style = MaterialTheme.typography.titleLarge)
+                    OutlinedTextField(
+                        value = pptxZoomInput,
+                        onValueChange = { value -> pptxZoomInput = value.filter { it.isDigit() }.take(3) },
+                        singleLine = true,
+                        label = { Text("Exact zoom (%)") },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Slider(
+                        value = PresentationZoomPolicy.coerce(pptxZoomFactor),
+                        onValueChange = { value ->
+                            pptxZoomFactor = PresentationZoomPolicy.coerce(value)
+                            pptxZoomInput = PresentationZoomPolicy.toPercent(pptxZoomFactor).toString()
+                        },
+                        valueRange = PresentationZoomPolicy.MIN_ZOOM..PresentationZoomPolicy.MAX_ZOOM,
+                        steps = 24
+                    )
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("50%", style = MaterialTheme.typography.labelSmall)
+                        Text("300%", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    pptxZoomInput.toIntOrNull()?.let { percent ->
+                        pptxZoomFactor = PresentationZoomPolicy.fromPercent(percent)
+                    }
+                    showPptxZoomDialog = false
+                }) { Text("Done") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    pptxZoomFactor = PresentationZoomPolicy.DEFAULT_ZOOM
+                    pptxZoomInput = "100"
+                }) { Text("Reset 100%") }
+            }
+        )
+    }
+
+    if (showGoToCellDialog) {
+        AlertDialog(
+            onDismissRequest = { showGoToCellDialog = false },
+            title = { Text("Go to cell") },
+            text = {
+                OutlinedTextField(
+                    value = goToCellInput,
+                    onValueChange = { value ->
+                        goToCellInput = value.filter { it.isLetterOrDigit() }.take(8).uppercase()
+                    },
+                    singleLine = true,
+                    label = { Text("Cell address (for example A1)") },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Ascii,
+                        imeAction = androidx.compose.ui.text.input.ImeAction.Go
+                    ),
+                    keyboardActions = KeyboardActions(onGo = {
+                        spreadsheetWebView?.evaluateJavascript(
+                            "goToCell(${org.json.JSONObject.quote(goToCellInput)});",
+                            null
+                        )
+                        showGoToCellDialog = false
+                    }),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val target = spreadsheetWebView
+                    if (target == null || goToCellInput.isBlank()) {
+                        android.widget.Toast.makeText(context, "Enter a cell address", android.widget.Toast.LENGTH_SHORT).show()
+                    } else {
+                        target.evaluateJavascript(
+                            "goToCell(${org.json.JSONObject.quote(goToCellInput)});",
+                            null
+                        )
+                        showGoToCellDialog = false
+                    }
+                }) { Text("Go") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showGoToCellDialog = false }) { Text("Cancel") }
             }
         )
     }

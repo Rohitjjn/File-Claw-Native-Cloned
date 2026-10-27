@@ -20,6 +20,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import com.example.formats.common.search.InViewerSearchCommandPolicy
 import com.example.formats.docx.DocxTextRecovery
+import com.example.formats.ooxml.OfficeWebViewSecurity
 import com.example.formats.text.ui.PlainTextPreview
 import com.example.platform.webview.MimeAwareAssetsPathHandler
 
@@ -29,6 +30,7 @@ fun DocxPreviewWebView(
     isNightMode: Boolean,
     viewModel: MainViewModel,
     modifier: Modifier = Modifier,
+    notice: String? = null,
     onPageChanged: (Int, Int) -> Unit = { _, _ -> },
     scrollToPage: Int? = null,
     onScrollProgressHandled: () -> Unit = {},
@@ -68,6 +70,11 @@ fun DocxPreviewWebView(
     // can never re-anchor a gesture in progress.
     var lastPageReportedZoom by remember(fileEntity.path) { mutableFloatStateOf(-1f) }
     val context = LocalContext.current
+    // Compose owns the real WebView bounds. Report each non-zero layout pass to
+    // the page instead of letting it guess from a possibly stale DOM viewport.
+    val layoutListeners = remember {
+        java.util.IdentityHashMap<android.webkit.WebView, android.view.ViewTreeObserver.OnGlobalLayoutListener>()
+    }
     val latestSearchResultCallback = androidx.compose.runtime.rememberUpdatedState(onSearchResultCount)
     val latestPageChangedCallback = androidx.compose.runtime.rememberUpdatedState(onPageChanged)
     val latestDocumentReadyCallback = androidx.compose.runtime.rememberUpdatedState(onDocumentReady)
@@ -81,6 +88,7 @@ fun DocxPreviewWebView(
     // the document finishes loading (Loop 10).
     val latestZoomForPageLoad = androidx.compose.runtime.rememberUpdatedState(zoomFactor)
     val latestNightModeForPageLoad = androidx.compose.runtime.rememberUpdatedState(isNightMode)
+    val latestNotice = androidx.compose.runtime.rememberUpdatedState(notice)
 
     // Loop 12 (Bug B): query changes search exactly once; arrow presses issue only
     // next/prev deltas, so all N matches stay reachable in both directions.
@@ -108,9 +116,12 @@ fun DocxPreviewWebView(
             issuedSearch = plan.issued
         }
     }
-    LaunchedEffect(webViewRef, isWebViewLoading, isNightMode, pureKotlinFallback) {
+    LaunchedEffect(webViewRef, isWebViewLoading, isNightMode, notice, pureKotlinFallback) {
         if (webViewRef != null && !isWebViewLoading && pureKotlinFallback == null) {
-            webViewRef?.evaluateJavascript("setDarkMode($isNightMode);", null)
+            webViewRef?.evaluateJavascript(
+                "setDarkMode($isNightMode); setNotice(${org.json.JSONObject.quote(notice.orEmpty())});",
+                null
+            )
         }
     }
     // Zoom is owned by the page's own gesture engine (pinch around the fingers, double
@@ -256,16 +267,7 @@ fun DocxPreviewWebView(
                             webViewRef = this
                             latestWebViewCreatedCallback.value(this)
                             settings.apply {
-                                javaScriptEnabled = true
-                                domStorageEnabled = true
-                                // The asset loader serves both the editor page and the
-                                // document bytes; no raw file scheme access is needed.
-                                allowFileAccess = false
-                                allowContentAccess = false
-                                @Suppress("DEPRECATION")
-                                allowFileAccessFromFileURLs = false
-                                @Suppress("DEPRECATION")
-                                allowUniversalAccessFromFileURLs = false
+                                OfficeWebViewSecurity.configure(this)
                                 builtInZoomControls = false
                                 displayZoomControls = false
                                 setSupportZoom(false)
@@ -275,6 +277,22 @@ fun DocxPreviewWebView(
                                 loadWithOverviewMode = false
                             }
                             setBackgroundColor(if (isNightMode) 0xFF151514.toInt() else 0xFFfaf9f5.toInt())
+
+                            val host = this
+                            var lastLayoutWidth = 0
+                            var lastLayoutHeight = 0
+                            val layoutListener = object : android.view.ViewTreeObserver.OnGlobalLayoutListener {
+                                override fun onGlobalLayout() {
+                                    val width = host.width
+                                    val height = host.height
+                                    if (width <= 0 || height <= 0 || (width == lastLayoutWidth && height == lastLayoutHeight)) return
+                                    lastLayoutWidth = width
+                                    lastLayoutHeight = height
+                                    host.evaluateJavascript("notifyViewport($width, $height);", null)
+                                }
+                            }
+                            viewTreeObserver.addOnGlobalLayoutListener(layoutListener)
+                            layoutListeners[host] = layoutListener
 
                             val pageChangedCallback = latestPageChangedCallback
                             addJavascriptInterface(object : Any() {
@@ -371,8 +389,12 @@ fun DocxPreviewWebView(
                                     // the bridge base64 path is only the in-page fallback.
                                     val freshZoom = latestZoomForPageLoad.value
                                     val freshNightMode = latestNightModeForPageLoad.value
+                                    // Seed the layout bridge from the current View bounds;
+                                    // the global-layout listener keeps it current after Compose.
                                     view?.evaluateJavascript(
-                                        "setZoom($freshZoom); loadDocx(null, $freshNightMode);",
+                                        "notifyViewport(${view.width}, ${view.height}); " +
+                                            "setNotice(${org.json.JSONObject.quote(latestNotice.value.orEmpty())}); " +
+                                            "setZoom($freshZoom); loadDocx(null, $freshNightMode);",
                                         null
                                     )
                                 }
@@ -381,18 +403,14 @@ fun DocxPreviewWebView(
                                     view: android.webkit.WebView?,
                                     request: android.webkit.WebResourceRequest?
                                 ): Boolean {
-                                    val uri = request?.url ?: return true
-                                    val localEditorAsset = uri.scheme == "https" &&
-                                        uri.host == "appassets.androidplatform.net" &&
-                                        (uri.path?.startsWith("/assets/editor/") == true || uri.path?.startsWith("/docx-src/") == true)
-                                    return !localEditorAsset
+                                    return OfficeWebViewSecurity.shouldBlockNavigation(request)
                                 }
 
                                 override fun shouldInterceptRequest(
                                     view: android.webkit.WebView?,
                                     request: android.webkit.WebResourceRequest?
                                 ): android.webkit.WebResourceResponse? {
-                                    return request?.url?.let { docxAssetLoader.shouldInterceptRequest(it) }
+                                    return OfficeWebViewSecurity.intercept(request, docxAssetLoader)
                                 }
 
                                 override fun onReceivedError(
@@ -469,6 +487,9 @@ fun DocxPreviewWebView(
                     // composition prevents stale instances (and their render processes)
                     // from retaining the file context after a file switch.
                     onRelease = { webView ->
+                        layoutListeners.remove(webView)?.let { listener ->
+                            webView.viewTreeObserver.removeOnGlobalLayoutListener(listener)
+                        }
                         webViewRef = null
                         webView.destroy()
                     },
