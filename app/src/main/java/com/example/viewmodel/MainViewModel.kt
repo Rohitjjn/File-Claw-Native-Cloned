@@ -554,23 +554,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val current = _currentFileState.value as? FileContentState.CsvSuccess
                 val table = current?.table
-                if (current == null || current.file.path != fileEntity.path || !current.editable || table == null) {
+                // Two editing tiers share this screen: delimited CSV/TSV (table != null,
+                // unchanged) and the newer XLSX "light edit" tier (spreadsheetEditable,
+                // single-sheet workbooks only -- see XlsxFormatHandler for why multi-sheet
+                // workbooks are never made editable here).
+                if (current == null || current.file.path != fileEntity.path || !current.editable ||
+                    (table == null && !current.spreadsheetEditable)
+                ) {
                     _fileEvent.value = "This sheet is read-only, so nothing was saved."
                     return@launch
                 }
                 val diskFile = File(fileEntity.path)
                 val detection = FormatDetector.detect(diskFile, diskFile.name)
-                val saveResult = FormatRegistry.save(
-                    detection,
-                    FormatSaveRequest.Delimited(
-                        file = diskFile,
-                        rows = newRows,
-                        charsetName = table.charset.name(),
-                        hadBom = table.hadBom,
-                        delimiter = table.delimiter,
-                        lineEnd = table.lineEnd
+                val saveResult = if (table != null) {
+                    FormatRegistry.save(
+                        detection,
+                        FormatSaveRequest.Delimited(
+                            file = diskFile,
+                            rows = newRows,
+                            charsetName = table.charset.name(),
+                            hadBom = table.hadBom,
+                            delimiter = table.delimiter,
+                            lineEnd = table.lineEnd
+                        )
                     )
-                )
+                } else {
+                    FormatRegistry.save(
+                        detection,
+                        FormatSaveRequest.Spreadsheet(
+                            file = diskFile,
+                            rows = newRows,
+                            sheetName = current.sheetName ?: "Sheet1"
+                        )
+                    )
+                }
                 if (saveResult != FormatOperationResult.Completed) {
                     _fileEvent.value = when (saveResult) {
                         is FormatOperationResult.Unsupported -> saveResult.reason
@@ -583,7 +600,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 syncBackToArchive(fileEntity, diskFile)
                 repository.insertRecentFile(updatedEntity)
                 withContext(Dispatchers.Main) {
-                    _currentFileState.value = FileContentState.CsvSuccess(newRows, updatedEntity, false, null, table)
+                    _currentFileState.value = FileContentState.CsvSuccess(
+                        rows = newRows,
+                        file = updatedEntity,
+                        truncated = false,
+                        readOnlyReason = null,
+                        table = table,
+                        spreadsheetEditable = current.spreadsheetEditable,
+                        sheetName = current.sheetName
+                    )
                 }
 
                 val writeBackError = if (fileEntity.sourceUri != null) {

@@ -146,10 +146,14 @@ dependencies {
     implementation("org.jetbrains:markdown:0.7.3")
     implementation("androidx.webkit:webkit:1.12.1")
 
-    // Archives and Excel (read-only). CSV/TSV is parsed by com.example.core.csv.
+    // Archives and Excel (preview + light cell-value edit for single-sheet workbooks).
+    // CSV/TSV is parsed by com.example.core.csv.
     implementation(libs.commons.compress)
     implementation(libs.xz)
     implementation(libs.fastexcel.reader)
+    // Light-edit mode for XLSX: writes plain cell VALUES back (no formulas/styling),
+    // same tier of support CSV already had. Same library family as the reader above.
+    implementation(libs.fastexcel.writer)
     implementation(libs.zip4j)
 
     // Apache POI for DOCX manipulation is disabled for lightweight native alternative to speed up builds and avoid memory limit issues

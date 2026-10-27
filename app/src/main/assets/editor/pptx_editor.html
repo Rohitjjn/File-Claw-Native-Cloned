@@ -104,47 +104,143 @@
     </div>
 
     <script>
-        function loadPptx(base64, isDark) {
+        // Boot guard: if the bundled libraries fail to even download/parse (very old
+        // WebView, missing asset), report that instead of leaving the caller waiting on
+        // a loading spinner forever.
+        window.addEventListener('error', function (event) {
+            if (window.__pptxBooted || window.__pptxBootReported) return;
+            window.__pptxBootReported = true;
+            if (window.Android && window.Android.onDocumentError) {
+                window.Android.onDocumentError('The presentation engine could not start (' + (event && event.message || 'unknown') + ').');
+            }
+        });
+
+        // Honest recovery view: pptx-preview (a pure client-side renderer) can throw on
+        // slide structures it does not fully handle even for a perfectly valid PPTX
+        // (observed during testing: a theme/background lookup assumes a shape the file
+        // does not always have). Rather than leave the user with nothing, fall back to
+        // extracting each slide's plain text directly from the OOXML with JSZip (already
+        // loaded for the renderer itself) -- the same "degrade to text, never to blank"
+        // approach already used for DOCX (see DocxTextRecovery.kt).
+        function stripXmlTags(xml) {
+            // Pull only <a:t>...</a:t> run text, in document order; everything else
+            // (formatting, positions) is irrelevant to a plain-text fallback.
+            const out = [];
+            const re = /<a:t>([\s\S]*?)<\/a:t>/g;
+            let m;
+            while ((m = re.exec(xml)) !== null) {
+                out.push(
+                    m[1]
+                        .replace(/&lt;/g, '<')
+                        .replace(/&gt;/g, '>')
+                        .replace(/&quot;/g, '"')
+                        .replace(/&apos;/g, "'")
+                        .replace(/&amp;/g, '&')
+                );
+            }
+            return out.join(' ').trim();
+        }
+
+        function renderTextFallback(arrayBuffer, reason) {
+            return JSZip.loadAsync(arrayBuffer).then(function (zip) {
+                const slideFiles = Object.keys(zip.files)
+                    .filter(function (name) { return /^ppt\/slides\/slide\d+\.xml$/.test(name); })
+                    .sort(function (a, b) {
+                        const na = parseInt(a.match(/slide(\d+)\.xml/)[1], 10);
+                        const nb = parseInt(b.match(/slide(\d+)\.xml/)[1], 10);
+                        return na - nb;
+                    });
+                if (slideFiles.length === 0) throw new Error(reason || 'No slides found');
+                return Promise.all(slideFiles.map(function (name) { return zip.files[name].async('string'); }))
+                    .then(function (xmlContents) {
+                        const container = document.getElementById('editor-container');
+                        container.innerHTML = '';
+                        const banner = document.createElement('div');
+                        banner.style.cssText = 'padding:10px 14px;margin-bottom:8px;border-radius:8px;background:rgba(204,120,92,0.12);color:var(--text-primary);font-size:13px;max-width:800px;width:100%;box-sizing:border-box;';
+                        banner.textContent = 'Showing slide text only -- this presentation could not be fully formatted.';
+                        container.appendChild(banner);
+                        xmlContents.forEach(function (xml, index) {
+                            const text = stripXmlTags(xml);
+                            const card = document.createElement('div');
+                            card.className = 'slide';
+                            card.style.cssText = 'height:auto;min-height:120px;width:800px;max-width:100%;box-sizing:border-box;padding:16px;overflow:auto;';
+                            const title = document.createElement('div');
+                            title.style.cssText = 'font-weight:bold;margin-bottom:8px;opacity:0.6;font-size:12px;';
+                            title.textContent = 'Slide ' + (index + 1);
+                            const body = document.createElement('div');
+                            body.style.whiteSpace = 'pre-wrap';
+                            body.textContent = text || '(no text on this slide)';
+                            card.appendChild(title);
+                            card.appendChild(body);
+                            container.appendChild(card);
+                        });
+                        if (window.Android && window.Android.onDocumentLoaded) {
+                            window.Android.onDocumentLoaded(slideFiles.length);
+                        }
+                    });
+            });
+        }
+
+        // source is accepted for signature compatibility but ignored: the presentation's
+        // bytes are always streamed in directly from the WebViewAssetLoader endpoint
+        // below (see PptxPreviewWebView.kt for why this replaced a Base64 string passed
+        // through evaluateJavascript).
+        function loadPptx(source, isDark) {
+            window.__pptxBooted = true;
             if (isDark) document.body.classList.add('dark');
-            
+
             if (typeof pptxPreview === 'undefined' || typeof JSZip === 'undefined') {
                 if (window.Android && window.Android.onDocumentError) {
                     window.Android.onDocumentError("Required libraries (pptx-preview or jszip) failed to load");
                 }
                 return;
             }
-            
-            try {
-                const binary_string = window.atob(base64);
-                const len = binary_string.length;
-                const bytes = new Uint8Array(len);
-                for (let i = 0; i < len; i++) {
-                    bytes[i] = binary_string.charCodeAt(i);
-                }
-                const arrayBuffer = bytes.buffer;
-                
-                const container = document.getElementById("editor-container");
-                const viewer = pptxPreview.init(container, {
-                    width: window.innerWidth - 32,
-                    mode: 'slide'
-                });
-                
-                viewer.preview(arrayBuffer).then(function() {
-                    if (window.Android && window.Android.onDocumentLoaded) {
-                        window.Android.onDocumentLoaded(viewer.slideCount || 1);
-                    }
-                }).catch(function(err) {
+
+            fetch('/pptx-src/presentation.pptx', { credentials: 'omit' })
+                .then(function (response) {
+                    if (!response.ok) throw new Error('HTTP ' + response.status);
+                    return response.arrayBuffer();
+                })
+                .then(function (arrayBuffer) {
+                    // Deferred two frames: window.innerWidth only reflects the WebView's
+                    // real on-screen size once its host (Jetpack Compose) has finished
+                    // laying it out, which can happen slightly AFTER this page starts
+                    // running -- measuring it synchronously on page load can size the
+                    // first slide for a stale/transient width.
+                    requestAnimationFrame(function () {
+                        requestAnimationFrame(function () {
+                            try {
+                                const container = document.getElementById("editor-container");
+                                const viewer = pptxPreview.init(container, {
+                                    width: Math.max(280, window.innerWidth - 32),
+                                    mode: 'slide'
+                                });
+                                viewer.preview(arrayBuffer).then(function () {
+                                    if (window.Android && window.Android.onDocumentLoaded) {
+                                        window.Android.onDocumentLoaded(viewer.slideCount || 1);
+                                    }
+                                }).catch(function (err) {
+                                    renderTextFallback(arrayBuffer, err && err.toString()).catch(function (fallbackErr) {
+                                        if (window.Android && window.Android.onDocumentError) {
+                                            window.Android.onDocumentError((err && err.toString()) || fallbackErr.toString());
+                                        }
+                                    });
+                                });
+                            } catch (err) {
+                                renderTextFallback(arrayBuffer, err && err.toString()).catch(function (fallbackErr) {
+                                    if (window.Android && window.Android.onDocumentError) {
+                                        window.Android.onDocumentError((err && err.toString()) || fallbackErr.toString());
+                                    }
+                                });
+                            }
+                        });
+                    });
+                })
+                .catch(function (err) {
                     if (window.Android && window.Android.onDocumentError) {
-                        window.Android.onDocumentError(err.toString());
-                    } else {
-                        document.getElementById("editor-container").innerHTML = "Error rendering PPTX: " + err.toString();
+                        window.Android.onDocumentError('Could not read the presentation file: ' + err.toString());
                     }
                 });
-            } catch (err) {
-                if (window.Android && window.Android.onDocumentError) {
-                    window.Android.onDocumentError(err.toString());
-                }
-            }
         }
     </script>
 </body>

@@ -2047,7 +2047,6 @@ fun FilePreviewScreen(
                 }
                 is FileContentState.PptxSuccess -> {
                     PptxPreviewWebView(
-                        base64Pptx = state.base64Data,
                         fileEntity = state.file,
                         isNightMode = isDocxNightMode,
                         viewModel = viewModel,

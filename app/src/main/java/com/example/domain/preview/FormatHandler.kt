@@ -72,6 +72,18 @@ sealed interface FormatSaveRequest {
         val delimiter: Char,
         val lineEnd: String
     ) : FormatSaveRequest
+
+    /**
+     * Light-edit save for a single-sheet spreadsheet workbook (XLSX): writes plain cell
+     * VALUES back, same tier of support CSV already has (no formulas, no styling, no
+     * multiple sheets). Only offered for workbooks that have exactly one sheet, so a
+     * save can never silently drop other sheets the viewer never showed.
+     */
+    data class Spreadsheet(
+        override val file: File,
+        val rows: List<List<String>>,
+        val sheetName: String
+    ) : FormatSaveRequest
 }
 
 data class FormatExportRequest(
