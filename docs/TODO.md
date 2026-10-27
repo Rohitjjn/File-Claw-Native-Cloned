@@ -1,31 +1,36 @@
 # Work remaining
 
-This is the short active checklist. For exact prior commands/results, see [`STATUS.md`](STATUS.md). The active task does not include adding formats or preview capabilities.
+The Office preview repair and expansion pass has implemented the three reported
+root-cause fixes and added format/validation/UI coverage. The items below are
+the remaining verification and compatibility work.
 
-## Required verification gates
+## Required runtime gates
 
-- [ ] On a machine with JDK 17 and Android SDK 34, run debug Kotlin compilation, all local unit tests, APK assembly, `lintDebug`, `detekt`, and `:app:jacocoCoreVerify`. Record each command and its actual result.
-- [ ] Run the Room `DatabaseMigrationTest`; inspect KSP output and decide whether the version-4 Room schema JSON should be checked in. Current source declares DB version 4, but only `app/schemas/.../3.json` is committed.
-- [ ] Install the built APK on an emulator/device and exercise existing PDF and DOCX previews. The PDF/DOCX MIME change is source-level only until this is done.
+- [ ] Observe the final commit's `Android Build Verification` CI result for debug/release compilation, release shrinking and JVM unit tests.
+- [ ] Observe the final commit's `Office Renderer Tests` CI result for JavaScript syntax, OOXML validation, headless Chromium renderer tests and the `kotlin-inspector` JVM harness.
+- [ ] On a JDK 17 + Android SDK 34 machine, run `compileDebugKotlin`, `testDebugUnitTest`, `assembleDebug`, `assembleRelease`, `lintDebug`, `detekt` and `jacocoCoreVerify` and record each result separately.
+- [ ] Install the APK on an emulator/device and open every supported Office format from local storage, an external content intent and a ZIP entry.
+- [ ] Verify Android System WebView version, `WebViewAssetLoader` requests, absence of `file://`/network requests, search/navigation, zoom/pan, double-tap, dark/light themes, orientation, lifecycle, back/retry, share, print/export and safe save.
 
-## PDF preview acceptance
+## Format-specific acceptance
 
-- [ ] Open a regular local PDF and verify the first page renders; inspect local PDF.js main-module and worker requests and confirm both `.mjs` assets use `text/javascript`.
-- [ ] Open a PDF from an external file intent and an archive entry; exercise a password-protected file if available.
-- [ ] Check search and next/previous navigation, page jumps/bookmark, rotate, zoom, page scrubber, print/share, and existing error/retry states.
-- [ ] Check a large or mixed-orientation file without removing the existing range, resident-page, pixel-budget, or dimension limits.
+- [ ] DOCX/DOCM/DOTX/DOTM: verify formatted visible content, search/count navigation, page jumps, pinch/double-tap zoom, dark mode, dedicated print and text-recovery retry.
+- [ ] XLSX/XLSM/XLTX/XLTM: verify bounded grid, formulas-as-values, single-sheet light edit/save, read-only multi-sheet/macro/template notices, go-to-cell, copy, search, zoom and table print.
+- [ ] PPTX/PPTM/PPSX/POTX/POTM: verify slide navigation, cross-slide search, images/tables, text fallback, dark mode, zoom/pan and all-slide print.
+- [ ] DOC/XLS/PPT: verify bounded read-only text/grid extraction and honest identify-only fallback for unsupported/encrypted OLE2 variants.
+- [ ] Corrupt, truncated, password-protected, misleading-extension and oversized files: verify explicit error/retry states and no crash.
 
-## DOCX preview acceptance
+## Performance and security follow-up
 
-- [ ] Open ordinary DOCX files from app storage, an external file intent, and a ZIP entry. Confirm the editor page and both bundled scripts load, `/docx-src/document.docx` returns bytes, and formatted content renders.
-- [ ] Check search/count navigation, page tracking, toolbar/slider/pinch zoom, the existing dark-mode behavior, print, and retry/recovery.
-- [ ] Confirm a renderer or malformed-file failure remains an honest recovery surface; do not present extracted text as a successful formatted rendering.
-- [ ] Inspect actual `WebViewDocx` logs and visible recovery reason if the preview still fails.
-
-## Separate source-inspection follow-up
-
-- [ ] Decide whether `ArchiveLimits.maxTotalBytes` is meant to be an enforced archive limit. It is currently declared but unused; do not rely on or describe a 16 GiB aggregate cap until it is implemented and tested. See [`SECURITY.md`](SECURITY.md). This is separate from the PDF/DOCX preview repair.
+- [ ] Measure Android app heap and time-to-first-content for large DOCX/PPTX/XLSX files; browser heap figures are not Android memory measurements.
+- [ ] Run an Android WebView fuzz/robustness pass with the committed adversarial corpus.
+- [ ] Decide whether `ArchiveLimits.maxTotalBytes` should be enforced in the general archive extractor. The OOXML inspector has its own aggregate cap, but the general 16 GiB archive cap is still metadata-only.
+- [ ] Consider removing the retained unused `xspreadsheet` asset after confirming no other viewer references it; preserve its license notice until then.
+- [ ] Consider a full OOXML parser (for example POI) only if fidelity requirements justify its APK/memory cost; the current engines intentionally provide bounded preview rather than full Office editing.
 
 ## Scope boundary
 
-Preserve existing behavior, limits, data migrations, assets, and licenses. Do not add new PDF, DOCX, XLSX, PPTX, or other preview support in this task. Do not redesign unrelated UI or change app identity/build structure.
+Do not claim full Office editing, macro execution, legacy binary layout, chart
+round-tripping, embedded media playback or unlimited large-file support. Keep
+the single `FormatRegistry`, the existing safe-save/URI architecture, bundled
+offline assets, security limits and the current design language.

@@ -40,4 +40,15 @@ class LegacyDocExtractorTest {
         assertTrue("Should extract first paragraph", extracted.text.contains("First executive summary paragraph"))
         assertTrue("Should extract second paragraph", extracted.text.contains("Second paragraph with key findings"))
     }
+
+    @Test
+    fun extractFromWordDocumentStream_preservesUnicodeText() {
+        val header = ByteArray(512)
+        val text = "Unicode summary: नमस्ते दुनिया — مرحبا بالعالم 🧠\r"
+        val bytes = header + text.toByteArray(Charsets.UTF_16LE)
+        val extracted = LegacyDocExtractor.extractFromWordDocumentStream(bytes, "unicode.doc")
+        assertTrue("Should extract Hindi", extracted.text.contains("नमस्ते दुनिया"))
+        assertTrue("Should extract Arabic", extracted.text.contains("مرحبا بالعالم"))
+        assertTrue("Should preserve emoji", extracted.text.contains("🧠"))
+    }
 }

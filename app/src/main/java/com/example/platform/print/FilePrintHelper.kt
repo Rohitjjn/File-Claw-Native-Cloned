@@ -15,6 +15,8 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import java.io.File
 import java.io.FileInputStream
+import com.example.formats.ooxml.OfficeWebViewSecurity
+import com.example.formats.spreadsheet.SpreadsheetGridPayload
 import com.example.platform.webview.MimeAwareAssetsPathHandler
 import java.io.FileOutputStream
 
@@ -168,8 +170,7 @@ object FilePrintHelper {
                     .build()
 
                 tempWebView.settings.apply {
-                    javaScriptEnabled = true
-                    domStorageEnabled = true
+                    OfficeWebViewSecurity.configure(this)
                     builtInZoomControls = false
                     displayZoomControls = false
                     setSupportZoom(false)
@@ -281,12 +282,16 @@ object FilePrintHelper {
                 }, "Android")
 
                 tempWebView.webViewClient = object : WebViewClient() {
+                    override fun shouldOverrideUrlLoading(
+                        view: WebView?,
+                        request: android.webkit.WebResourceRequest?
+                    ): Boolean = OfficeWebViewSecurity.shouldBlockNavigation(request)
+
                     override fun shouldInterceptRequest(
                         view: WebView?,
                         request: android.webkit.WebResourceRequest?
-                    ): android.webkit.WebResourceResponse? {
-                        return request?.url?.let { docxAssetLoader.shouldInterceptRequest(it) }
-                    }
+                    ): android.webkit.WebResourceResponse? =
+                        OfficeWebViewSecurity.intercept(request, docxAssetLoader)
 
                     override fun onPageFinished(view: WebView?, url: String?) {
                         view?.evaluateJavascript("loadDocx(null, false);", null)
@@ -332,6 +337,246 @@ object FilePrintHelper {
                 android.widget.Toast.makeText(context, "Print initialization error: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
             }
         }
+    }
+
+    /**
+     * Prints a PPTX through a dedicated print-mode WebView. Unlike the live
+     * single-slide viewer, this renders every slide in list mode and waits for
+     * the page's `onPrintReady` signal before creating the print adapter.
+     */
+    fun printPptx(
+        context: Context,
+        pptxFile: File,
+        title: String
+    ) {
+        val printManager = context.getSystemService(Context.PRINT_SERVICE) as? PrintManager
+        if (printManager == null) {
+            android.widget.Toast.makeText(context, "Print service is not available on this device", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (!pptxFile.isFile || pptxFile.length() == 0L) {
+            android.widget.Toast.makeText(context, "Cannot print: File is empty or missing", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        mainHandler.post {
+            try {
+                val tempWebView = WebView(context)
+                activeWebViews.add(tempWebView)
+                val pptxAssetLoader = androidx.webkit.WebViewAssetLoader.Builder()
+                    .addPathHandler("/assets/", MimeAwareAssetsPathHandler(context))
+                    .addPathHandler("/pptx-src/", object : androidx.webkit.WebViewAssetLoader.PathHandler {
+                        override fun handle(path: String): android.webkit.WebResourceResponse? {
+                            if (path != "presentation.pptx" || !pptxFile.isFile) return null
+                            return runCatching {
+                                android.webkit.WebResourceResponse(
+                                    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                                    null,
+                                    200,
+                                    "OK",
+                                    mapOf("Content-Length" to pptxFile.length().toString()),
+                                    FileInputStream(pptxFile)
+                                )
+                            }.getOrNull()
+                        }
+                    })
+                    .build()
+
+                tempWebView.settings.apply {
+                    OfficeWebViewSecurity.configure(this)
+                    builtInZoomControls = false
+                    displayZoomControls = false
+                    setSupportZoom(false)
+                }
+
+                var printSubmitted = false
+                fun release() {
+                    activeWebViews.remove(tempWebView)
+                    tempWebView.stopLoading()
+                    tempWebView.destroy()
+                }
+                fun triggerPrint() {
+                    if (printSubmitted) return
+                    printSubmitted = true
+                    val printAdapter = tempWebView.createPrintDocumentAdapter(title)
+                    printManager.print(
+                        title,
+                        printAdapter,
+                        PrintAttributes.Builder()
+                            .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
+                            .setColorMode(PrintAttributes.COLOR_MODE_COLOR)
+                            .build()
+                    )
+                    mainHandler.postDelayed({ release() }, 60_000L)
+                }
+                fun failPrint(reason: String) {
+                    if (printSubmitted) return
+                    printSubmitted = true
+                    android.widget.Toast.makeText(context, "Print failed: ${reason.take(120)}", android.widget.Toast.LENGTH_LONG).show()
+                    mainHandler.postDelayed({ release() }, 1_000L)
+                }
+
+                tempWebView.addJavascriptInterface(object : Any() {
+                    @android.webkit.JavascriptInterface
+                    fun onPrintReady() {
+                        mainHandler.post { triggerPrint() }
+                    }
+
+                    @android.webkit.JavascriptInterface
+                    fun onDocumentLoaded(totalSlides: Int) {
+                        // The page reports this before fonts/images settle; onPrintReady is authoritative.
+                    }
+
+                    @android.webkit.JavascriptInterface
+                    fun onDocumentError(error: String) {
+                        mainHandler.post { failPrint(error) }
+                    }
+                }, "Android")
+
+                tempWebView.webViewClient = object : WebViewClient() {
+                    override fun shouldOverrideUrlLoading(
+                        view: WebView?,
+                        request: android.webkit.WebResourceRequest?
+                    ): Boolean = OfficeWebViewSecurity.shouldBlockNavigation(request)
+
+                    override fun shouldInterceptRequest(
+                        view: WebView?,
+                        request: android.webkit.WebResourceRequest?
+                    ): android.webkit.WebResourceResponse? =
+                        OfficeWebViewSecurity.intercept(request, pptxAssetLoader)
+
+                    override fun onPageFinished(view: WebView?, url: String?) {
+                        view?.evaluateJavascript(
+                            "notifyViewport(1122, 794); loadPptx(null, false);",
+                            null
+                        )
+                    }
+
+                    override fun onReceivedError(
+                        view: WebView?,
+                        request: android.webkit.WebResourceRequest?,
+                        error: android.webkit.WebResourceError?
+                    ) {
+                        if (request?.isForMainFrame == true) failPrint("The print page could not be loaded.")
+                    }
+                }
+
+                val sizeMb = (pptxFile.length() / (1024L * 1024L)).coerceAtLeast(1L)
+                mainHandler.postDelayed({
+                    if (!printSubmitted) failPrint("Presentation print timed out.")
+                }, (20_000L + sizeMb * 500L).coerceAtMost(90_000L))
+
+                tempWebView.loadUrl("https://${OfficeWebViewSecurity.ASSET_HOST}/assets/editor/pptx_editor.html?print=1")
+            } catch (error: Exception) {
+                android.widget.Toast.makeText(context, "Print initialization error: ${error.message}", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    /** Prints a bounded, escaped HTML table of the current spreadsheet values. */
+    fun printSpreadsheet(
+        context: Context,
+        rows: List<List<String>>,
+        sheetName: String?,
+        title: String
+    ) {
+        val printManager = context.getSystemService(Context.PRINT_SERVICE) as? PrintManager
+        if (printManager == null) {
+            android.widget.Toast.makeText(context, "Print service is not available on this device", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        mainHandler.post {
+            try {
+                val tempWebView = WebView(context)
+                activeWebViews.add(tempWebView)
+                tempWebView.settings.apply {
+                    javaScriptEnabled = false
+                    allowFileAccess = false
+                    allowContentAccess = false
+                    blockNetworkLoads = true
+                    blockNetworkImage = true
+                    builtInZoomControls = false
+                    displayZoomControls = false
+                    setSupportZoom(false)
+                }
+
+                val truncated = rows.size > SpreadsheetGridPayload.MAX_PRINT_ROWS ||
+                    rows.any { it.size > SpreadsheetGridPayload.MAX_PRINT_COLUMNS }
+                val safeRows = rows.take(SpreadsheetGridPayload.MAX_PRINT_ROWS).map { row ->
+                    row.take(SpreadsheetGridPayload.MAX_PRINT_COLUMNS).map { cell ->
+                        escapeHtml(cell.take(SpreadsheetGridPayload.MAX_CELL_CHARS))
+                    }
+                }
+                val maxColumns = safeRows.maxOfOrNull { it.size } ?: 0
+                val header = (0 until maxColumns).joinToString("") { "<th>${spreadsheetColumnLabel(it)}</th>" }
+                val body = buildString {
+                    safeRows.forEachIndexed { rowIndex, row ->
+                        append("<tr><th class=\"row\">").append(rowIndex + 1).append("</th>")
+                        for (columnIndex in 0 until maxColumns) {
+                            append("<td>").append(row.getOrNull(columnIndex).orEmpty()).append("</td>")
+                        }
+                        append("</tr>")
+                    }
+                }
+                val note = if (truncated) {
+                    "<p class=\"note\">Print preview is limited to ${SpreadsheetGridPayload.MAX_PRINT_ROWS} rows and ${SpreadsheetGridPayload.MAX_PRINT_COLUMNS} columns. The original file was not changed.</p>"
+                } else ""
+                val html = """
+                    <!DOCTYPE html><html><head><meta charset="utf-8"><style>
+                    @page { size: landscape; margin: 8mm; }
+                    body { font-family: sans-serif; color:#141413; font-size:10px; }
+                    h1 { font-size:16px; margin:0 0 4px; }
+                    .note { color:#a9583e; font-size:10px; }
+                    table { border-collapse:collapse; width:100%; table-layout:auto; }
+                    th,td { border:1px solid #ddd; padding:3px 5px; text-align:left; vertical-align:top; white-space:pre-wrap; word-break:break-word; }
+                    th { background:#f2eee8; font-size:9px; }
+                    th.row { width:36px; }
+                    </style></head><body>
+                    <h1>${escapeHtml(title)}</h1>
+                    <p>${escapeHtml(SpreadsheetGridPayload.safeSheetName(sheetName))}</p>
+                    $note
+                    <table><thead><tr><th></th>$header</tr></thead><tbody>$body</tbody></table>
+                    </body></html>
+                """.trimIndent()
+
+                tempWebView.webViewClient = object : WebViewClient() {
+                    override fun shouldOverrideUrlLoading(
+                        view: WebView?,
+                        request: android.webkit.WebResourceRequest?
+                    ): Boolean = true
+
+                    override fun onPageFinished(view: WebView?, url: String?) {
+                        val printAdapter = tempWebView.createPrintDocumentAdapter(title)
+                        printManager.print(
+                            title,
+                            printAdapter,
+                            PrintAttributes.Builder()
+                                .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
+                                .setColorMode(PrintAttributes.COLOR_MODE_COLOR)
+                                .build()
+                        )
+                        mainHandler.postDelayed({
+                            activeWebViews.remove(tempWebView)
+                            tempWebView.destroy()
+                        }, 60_000L)
+                    }
+                }
+                tempWebView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
+            } catch (error: Exception) {
+                android.widget.Toast.makeText(context, "Print failed: ${error.message}", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun spreadsheetColumnLabel(index: Int): String {
+        var value = index + 1
+        val result = StringBuilder()
+        while (value > 0) {
+            value--
+            result.insert(0, ('A'.code + (value % 26)).toChar())
+            value /= 26
+        }
+        return result.toString()
     }
 
     fun printMarkdown(

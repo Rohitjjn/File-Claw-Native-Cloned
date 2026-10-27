@@ -12,19 +12,11 @@ import com.example.formats.registry.capabilities
 /**
  * Hand-off to the existing DOCX/PPTX WebView renderers.
  *
- * Both are now thin pass-throughs: [com.example.formats.docx.ui.DocxPreviewWebView] and
- * [com.example.formats.pptx.ui.PptxPreviewWebView] stream the file itself through
- * `WebViewAssetLoader` ("/docx-src/document.docx", "/pptx-src/presentation.pptx") and
- * never read this state's `base64Data` — both are always opened with the source argument
- * null/ignored. This handler used to read the whole file, Base64-encode it (~2.7x heap)
- * and park a multi-megabyte String here anyway, on every single open, for nothing; large
- * files were also turned away into the archive-tree view at a flat 25 MB even though the
- * streaming renderers handle files well beyond that (PPTX used to additionally pass that
- * giant string through a single `evaluateJavascript()` call, which is what made large
- * presentations the most likely of the two formats to fail outright -- see
- * PptxPreviewWebView.kt). Both formats now only confirm the file is readable and never
- * materialize the extra copy, so large DOCX/PPTX files open as fast as small ones and are
- * no longer size-limited here.
+ * Both viewers stream the original package through the fixed `/docx-src/` or
+ * `/pptx-src/` asset-loader routes; this state never carries a second Base64
+ * copy. Before either renderer starts, the shared OOXML inspector validates the
+ * untrusted package and identifies macro/template variants so they can be shown
+ * as an honest read-only preview rather than an editable document.
  */
 class OoxmlDocumentHandler(
     private val archiveHandler: ArchiveFormatHandler
@@ -39,9 +31,21 @@ class OoxmlDocumentHandler(
         if (!request.file.canRead() || request.file.length() <= 0L) {
             return archiveHandler.open(request)
         }
-        return when (request.detection.spec.id) {
-            "docx" -> FileContentState.DocxSuccess("", request.fileEntity)
-            "pptx" -> FileContentState.PptxSuccess("", request.fileEntity)
+        val inspection = try {
+            OoxmlPackageInspector.inspect(request.file)
+        } catch (error: OoxmlPackageInspector.InvalidPackageException) {
+            return FileContentState.Error(error.message ?: "This Office file could not be opened.")
+        }
+
+        val formatId = request.detection.spec.id
+        val expected = OoxmlPackageInspector.expectedFamily(formatId)
+        if (expected == null || expected != inspection.family) {
+            return FileContentState.Error("The file content does not match its Office document type.")
+        }
+
+        return when (formatId) {
+            "docx" -> FileContentState.DocxSuccess("", request.fileEntity, inspection.notice)
+            "pptx" -> FileContentState.PptxSuccess("", request.fileEntity, inspection.notice)
             else -> FileContentState.Error("Unsupported OOXML document type.")
         }
     }

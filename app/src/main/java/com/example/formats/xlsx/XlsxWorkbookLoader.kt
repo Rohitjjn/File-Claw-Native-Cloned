@@ -1,5 +1,7 @@
 package com.example.formats.xlsx
 
+import com.example.core.io.AtomicFileWriter
+import com.example.formats.spreadsheet.SpreadsheetGridPayload
 import java.io.File
 import java.io.IOException
 import java.io.OutputStream
@@ -13,15 +15,13 @@ data class XlsxWorkbookData(
 )
 
 object XlsxWorkbookLoader {
-    // Lowered from 50,000 / 256 (12.8M possible cells): that worst case, run through
-    // JSON + Base64 + a second copy inside the WebView for the x-spreadsheet grid
-    // (CsvPreview.kt), could reach several hundred MB and is a very plausible cause of
-    // "the app crashes as soon as I open a real Excel file" for any reasonably large,
-    // dense sheet. These caps still comfortably cover the vast majority of real-world
-    // spreadsheets; larger ones are truncated with a visible notice (same mechanism
-    // already used for CSV), never silently and never by crashing.
-    const val MAX_VIEW_ROWS = 20_000
-    const val MAX_VIEW_COLUMNS = 100
+    /**
+     * The shared grid budget is stricter than the old 50,000 x 256 caps. A dense
+     * sheet at those old caps could create millions of strings, then duplicate
+     * them through JSON/Base64/WebView and exhaust an Android process heap.
+     */
+    val MAX_VIEW_ROWS get() = SpreadsheetGridPayload.MAX_ROWS
+    val MAX_VIEW_COLUMNS get() = SpreadsheetGridPayload.MAX_COLUMNS
 
     fun load(file: File): XlsxWorkbookData {
         if (!file.isFile) throw IOException("File not found")
@@ -31,27 +31,38 @@ object XlsxWorkbookLoader {
             val sheet = workbook.firstSheet
             val rows = ArrayList<List<String>>()
             var truncated = false
+            var totalChars = 0L
             sheet.openStream().use { stream ->
                 val iterator = stream.iterator()
-                while (iterator.hasNext()) {
+                outer@ while (iterator.hasNext()) {
                     if (rows.size >= MAX_VIEW_ROWS) {
                         truncated = true
                         break
                     }
                     val values = ArrayList<String>()
-                    for (cell in iterator.next()) {
+                    val cells = iterator.next()
+                    for (cell in cells) {
                         if (values.size >= MAX_VIEW_COLUMNS) {
                             truncated = true
                             break
                         }
-                        // A handful of cell types (certain date/number formats, formula
-                        // errors) can throw out of fastexcel's own .text conversion;
-                        // falling back to the raw stored value (or blank) keeps one
-                        // unreadable cell from failing the whole file.
-                        val text = runCatching { cell?.text }.getOrNull()
+                        // Some date/number/formula-error cells can throw from the
+                        // reader's text conversion. One bad cell must not abort the file.
+                        val rawText = runCatching { cell?.text }.getOrNull()
                             ?: runCatching { cell?.rawValue }.getOrNull()
                             ?: ""
-                        values.add(text)
+                        val (safeText, cellTruncated) = SpreadsheetGridPayload.clampCell(
+                            rawText,
+                            SpreadsheetGridPayload.MAX_TOTAL_CHARS - totalChars
+                        )
+                        truncated = truncated || cellTruncated
+                        values.add(safeText)
+                        totalChars += safeText.length
+                        if (totalChars >= SpreadsheetGridPayload.MAX_TOTAL_CHARS) {
+                            truncated = true
+                            rows.add(values)
+                            break@outer
+                        }
                     }
                     rows.add(values)
                 }
@@ -61,20 +72,21 @@ object XlsxWorkbookLoader {
     }
 
     /**
-     * Light-edit save: writes plain cell VALUES (as text; fastexcel infers number/date
-     * types where the text parses as one) to a single-sheet workbook. No formulas,
-     * formatting, column widths or merged cells are preserved -- this intentionally
-     * matches the same "values only" tier CSV editing already offers, not a full
-     * spreadsheet editor. Only ever called for workbooks that had exactly one sheet to
-     * begin with (enforced by the caller), so nothing the viewer never showed can be
-     * dropped by a save.
+     * Light-edit save: plain cell VALUES only (fastexcel infers numeric/date
+     * types where possible). Formulas, styles, widths, merged cells, macros,
+     * templates and additional sheets are intentionally not preserved. The
+     * caller only offers this path for a bounded, single-sheet workbook.
+     *
+     * The output is written atomically: a failed save never truncates the
+     * original workbook.
      */
     fun write(file: File, rows: List<List<String>>, sheetName: String) {
-        val safeSheetName = sheetName.ifBlank { "Sheet1" }
-        file.outputStream().use { output: OutputStream ->
+        val safeRows = SpreadsheetGridPayload.clampRows(rows)
+        require(!safeRows.truncated) { "The edited sheet exceeds the safe light-edit limit." }
+        AtomicFileWriter.write(file) { output: OutputStream ->
             val workbook = org.dhatim.fastexcel.Workbook(output, "File Claw", "1.0")
-            val worksheet = workbook.newWorksheet(safeSheetName)
-            for ((rowIndex, row) in rows.withIndex()) {
+            val worksheet = workbook.newWorksheet(SpreadsheetGridPayload.safeSheetName(sheetName))
+            for ((rowIndex, row) in safeRows.rows.withIndex()) {
                 for ((colIndex, value) in row.withIndex()) {
                     if (value.isEmpty()) continue
                     worksheet.value(rowIndex, colIndex, value)

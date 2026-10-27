@@ -15,7 +15,7 @@ This repository is an existing Android app. Treat the checked-in source, Gradle 
 
 ## Current scope
 
-The active request is to repair the app's existing PDF and DOCX preview paths and refresh repository project documentation. Do not add new format support, redesign the app, or modify user documents/assets. The source-level WebView MIME fix is described in `docs/PREVIEW_PIPELINES.md`; Android runtime confirmation is still required.
+The active request is the Office preview repair and expansion pass: root-cause fixes for DOCX/XLSX/PPTX, verified OOXML variant and legacy Office support, hardened offline viewers, consistent UI controls and reproducible tests. Preserve existing formats, the single `FormatRegistry`, safe-save/URI behavior, bundled assets and licenses. Do not claim Android runtime verification from browser/unit tests alone; see `docs/STATUS.md` and `docs/PREVIEW_PIPELINES.md`.
 
 ## Quality gate
 

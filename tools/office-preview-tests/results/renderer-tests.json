@@ -1,0 +1,372 @@
+{
+  "cases": 18,
+  "results": [
+    {
+      "name": "docx-normal",
+      "status": "pass",
+      "details": {
+        "pages": 1,
+        "firstRect": {
+          "width": 366,
+          "height": 473.640625
+        },
+        "logs": []
+      }
+    },
+    {
+      "name": "docx-late-layout",
+      "status": "pass",
+      "details": {
+        "firstRect": {
+          "width": 366,
+          "height": 473.640625
+        },
+        "logs": []
+      }
+    },
+    {
+      "name": "docx-print",
+      "status": "pass",
+      "details": {
+        "pages": 1,
+        "logs": []
+      }
+    },
+    {
+      "name": "docx-truncated",
+      "status": "pass",
+      "details": {
+        "error": "Could not render formatted layout (Error: Corrupted zip: can't find end of central directory).",
+        "logs": [
+          {
+            "type": "error",
+            "text": "renderAsync error: Error: Corrupted zip: can't find end of central directory"
+          }
+        ]
+      }
+    },
+    {
+      "name": "docx-docm",
+      "status": "pass",
+      "details": {
+        "pages": 1,
+        "logs": []
+      }
+    },
+    {
+      "name": "docx-dotx",
+      "status": "pass",
+      "details": {
+        "pages": 1,
+        "logs": []
+      }
+    },
+    {
+      "name": "docx-poi-docm",
+      "status": "pass",
+      "details": {
+        "pages": 1,
+        "logs": []
+      }
+    },
+    {
+      "name": "docx-poi-dotx",
+      "status": "pass",
+      "details": {
+        "pages": 1,
+        "logs": []
+      }
+    },
+    {
+      "name": "docx-external-rel",
+      "status": "pass",
+      "details": {
+        "externalRequests": [],
+        "logs": []
+      }
+    },
+    {
+      "name": "pptx-basic",
+      "status": "pass",
+      "details": {
+        "state": {
+          "bridge": {
+            "loaded": [
+              2
+            ],
+            "printReady": 0,
+            "errors": [],
+            "pages": [],
+            "slides": [
+              [
+                1,
+                2
+              ]
+            ],
+            "searches": [],
+            "zoom": [],
+            "fallback": [],
+            "edits": [],
+            "clipboard": [],
+            "gridReady": []
+          },
+          "slideWrappers": 1,
+          "fallbackCards": 0,
+          "images": 0,
+          "tables": 0,
+          "statusHidden": true,
+          "bodyText": "Read-only preview notice\n\nFile Claw Presentation\n\nOffline renderer fixture • नमस्ते दुनिया"
+        },
+        "interaction": {
+          "count": 1,
+          "slides": [
+            [
+              1,
+              2
+            ],
+            [
+              2,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "searches": [
+            [
+              1,
+              0,
+              false
+            ]
+          ],
+          "zoom": "2",
+          "marks": 1
+        },
+        "logs": []
+      }
+    },
+    {
+      "name": "pptx-rich-print",
+      "status": "pass",
+      "details": {
+        "state": {
+          "bridge": {
+            "loaded": [
+              8
+            ],
+            "printReady": 1,
+            "errors": [],
+            "pages": [],
+            "slides": [],
+            "searches": [],
+            "zoom": [],
+            "fallback": [],
+            "edits": [],
+            "clipboard": [],
+            "gridReady": []
+          },
+          "slideWrappers": 8,
+          "fallbackCards": 0,
+          "images": 1,
+          "tables": 1,
+          "statusHidden": true,
+          "bodyText": "Read-only preview notice\n\nFile Claw Presentation\n\nOffline renderer fixture • नमस्ते दुनिया\n\nSlide 2: searchable content\n\nALPHA BETA GAMMA\n\nCafé — मस्तिष्क 🧠 — مرحبا\n\nT1C1\n\n\t\n\nT1C2\n\n\t\n\nT1C3\n\n\t\n\nT1C4\n\n\n\n\nT2C1\n\n\t\n\nT2C2\n\n\t\n\nT2C3\n\n\t\n\nT2C4\n\n\n\n\nT3C1\n\n\t\n\nT3C2\n\n\t\n\nT3C3\n\n\t\n\nT3C4\n\nSlide 3: searchable content\n\nALPHA BETA GAMMA\n\nCafé — मस्तिष्क 🧠 — مرحبا\n\nEmbedded image and text\n\nALPHA BETA\n\nSlide 4: searcha"
+        },
+        "logs": []
+      }
+    },
+    {
+      "name": "pptx-pptm",
+      "status": "pass",
+      "details": {
+        "state": {
+          "bridge": {
+            "loaded": [
+              2
+            ],
+            "printReady": 0,
+            "errors": [],
+            "pages": [],
+            "slides": [
+              [
+                1,
+                2
+              ]
+            ],
+            "searches": [],
+            "zoom": [],
+            "fallback": [],
+            "edits": [],
+            "clipboard": [],
+            "gridReady": []
+          },
+          "slideWrappers": 1,
+          "fallbackCards": 0,
+          "images": 0,
+          "tables": 0,
+          "statusHidden": true,
+          "bodyText": "Read-only preview notice\n\nFile Claw Presentation\n\nOffline renderer fixture • नमस्ते दुनिया"
+        },
+        "logs": []
+      }
+    },
+    {
+      "name": "pptx-potx",
+      "status": "pass",
+      "details": {
+        "state": {
+          "bridge": {
+            "loaded": [
+              2
+            ],
+            "printReady": 0,
+            "errors": [],
+            "pages": [],
+            "slides": [
+              [
+                1,
+                2
+              ]
+            ],
+            "searches": [],
+            "zoom": [],
+            "fallback": [],
+            "edits": [],
+            "clipboard": [],
+            "gridReady": []
+          },
+          "slideWrappers": 1,
+          "fallbackCards": 0,
+          "images": 0,
+          "tables": 0,
+          "statusHidden": true,
+          "bodyText": "Read-only preview notice\n\nFile Claw Presentation\n\nOffline renderer fixture • नमस्ते दुनिया"
+        },
+        "logs": []
+      }
+    },
+    {
+      "name": "pptx-poi",
+      "status": "pass",
+      "details": {
+        "state": {
+          "bridge": {
+            "loaded": [
+              1
+            ],
+            "printReady": 0,
+            "errors": [],
+            "pages": [],
+            "slides": [
+              [
+                1,
+                1
+              ]
+            ],
+            "searches": [],
+            "zoom": [],
+            "fallback": [],
+            "edits": [],
+            "clipboard": [],
+            "gridReady": []
+          },
+          "slideWrappers": 1,
+          "fallbackCards": 0,
+          "images": 0,
+          "tables": 0,
+          "statusHidden": true,
+          "bodyText": "Read-only preview notice\n\n "
+        },
+        "logs": []
+      }
+    },
+    {
+      "name": "pptx-corrupt",
+      "status": "pass",
+      "details": {
+        "error": "Could not read the presentation file: Error: Corrupted zip: can't find end of central directory",
+        "logs": []
+      }
+    },
+    {
+      "name": "grid-basic",
+      "status": "pass",
+      "details": {
+        "state": {
+          "bridge": {
+            "loaded": [],
+            "printReady": 0,
+            "errors": [],
+            "pages": [],
+            "slides": [],
+            "searches": [],
+            "zoom": [],
+            "fallback": [],
+            "edits": [],
+            "clipboard": [],
+            "gridReady": [
+              [
+                31,
+                9
+              ]
+            ]
+          },
+          "visibleCells": 125,
+          "headers": 30,
+          "injected": 0,
+          "statusHidden": true,
+          "notice": ""
+        },
+        "interaction": {
+          "count": 6,
+          "searches": [
+            [
+              6,
+              0,
+              false
+            ],
+            [
+              6,
+              1,
+              false
+            ]
+          ],
+          "zoom": "2",
+          "dark": true,
+          "clipboard": [
+            "1"
+          ]
+        },
+        "edits": [
+          [
+            0,
+            1,
+            "Edited value"
+          ]
+        ],
+        "logs": []
+      }
+    },
+    {
+      "name": "grid-large",
+      "status": "pass",
+      "details": {
+        "visibleCells": 125,
+        "ready": [
+          5001,
+          9
+        ],
+        "logs": []
+      }
+    },
+    {
+      "name": "grid-adversarial",
+      "status": "pass",
+      "details": {
+        "visibleCells": 110,
+        "logs": []
+      }
+    }
+  ]
+}

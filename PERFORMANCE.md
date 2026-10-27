@@ -44,7 +44,7 @@ Keep the WebView HTML, JS libraries, document URI, and MIME responses local and 
 - Text preview handlers cap a displayed preview at **250,000 characters** and mark truncation separately so a partial view is not saved as the full original. The general `TextLoader` default is **2,000,000 characters**; `TextOperationReader` uses that default for larger operations.
 - `TextFileSearchEngine` streams through a **64 KiB** default buffer, keeps up to **10,000** hit offsets by default, and rejects queries longer than **4,096 characters**. It still scans the file to count matches; it does not load the complete file into one string.
 - Device filename indexing runs on `Dispatchers.IO` and is capped at depth **8** and **60,000** files. Name search is debounced by **150 ms**, ranks a bounded candidate set, and displays up to **150** results. The index is cached. If the index is empty, a background rebuild is started, but the current search takes its snapshot without waiting for that rebuild to finish.
-- CSV/TSV/PSV and XLSX preview loaders each cap output at **50,000 rows × 256 columns**. XLSX reads the first sheet for its table view. Those are independent upper bounds, not a memory target; a dense table close to both limits can still be large.
+- CSV/TSV/PSV parsing keeps its existing **50,000 rows × 256 columns** loader cap. XLSX parsing and the shared grid cap display/save at **20,000 rows × 100 columns**, **4,000 characters/cell** and **8,000,000 total characters**. XLSX reads the first sheet. Those are independent upper bounds, not a memory target; a dense table close to both limits can still be large, so the grid is virtualized.
 - The legacy XLS parser reads a workbook stream capped by the OLE helper at **30,000,000 bytes** and limits its displayed grid to **5,000 rows × 100 columns**. The generic binary viewer reads at most **4 KiB**.
 
 ### Archives and other large-format paths
@@ -57,9 +57,18 @@ Keep the WebView HTML, JS libraries, document URI, and MIME responses local and 
 
 ## What has and has not been measured
 
-Source inspection confirms the limits and paths above. It does **not** provide these results:
+Source inspection confirms the limits and paths above. Headless Chromium 153 on the local x86-64 sandbox provided these isolated renderer measurements (not Android app heap measurements):
 
-- Time to first PDF page, DOCX first render, archive listing, or filename-search response.
+- Basic DOCX visible render: ~1.3 s including local page/library/document requests.
+- DOCX late 1×1 → 390×844 layout with `ResizeObserver` removed: ~1.8 s, visible 366×474 page.
+- Rich DOCX (5 rendered pages, 96 search matches, zoom to 200%): ~1.3 s, ~8.6 MiB Chromium JS heap.
+- Rich PPTX print mode (8 slides, one image, one table): `onPrintReady` reached, ~7 MiB JS heap.
+- 5,001-row spreadsheet payload: ~0.1 s to ready, 125 visible DOM cells, ~2.6 MiB JS heap; 31-row basic payload also used 125 visible cells.
+- Adversarial spreadsheet payload and corrupt/truncated Office files produced no browser page errors.
+
+These are reproducible through `tools/office-preview-tests/`. They do **not** provide:
+
+- Time to first PDF page, DOCX first render, archive listing, or filename-search response on Android.
 - Peak app, WebView renderer, GPU, or native memory on any device.
 - Scrolling/zoom frame rate, thermal impact, battery use, or performance under concurrent app load.
 - Maximum reliable PDF page count or practical table size on supported devices.
@@ -74,7 +83,7 @@ On representative low-, mid-, and high-memory devices, measure:
 
 1. Cold and warm open; time to the first usable page/table/text, not just Activity launch.
 2. PDF first page, rapid scroll, page jump, password flow, zoom settle, mixed page sizes, and a high-page-count document. Watch both app and WebView renderer memory and renderer-crash logs.
-3. DOCX at and around the 25 MiB route threshold; confirm render, retry, and archive fallback behavior.
+3. DOCX/PPTX at increasing package sizes up to the 96 MiB compressed inspector cap; confirm render, retry, explicit rejection and memory behavior. There is no longer a flat 25 MiB archive-route fallback.
 4. Large text preview/search, dense CSV/XLSX near their row/column caps, and archive listing/extraction with many entries and high expansion ratios.
 5. Repeated open/close cycles and return-from-background behavior to detect retained WebViews, canvases, or stale cache data.
 

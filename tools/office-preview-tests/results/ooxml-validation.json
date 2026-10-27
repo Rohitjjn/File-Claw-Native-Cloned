@@ -1,0 +1,342 @@
+{
+  "checked": 27,
+  "failures": 0,
+  "results": [
+    {
+      "name": "adversarial.docx",
+      "expected": "reject",
+      "sha256": "91b088b027cffba571310880975238d9e49a0e028bde8964390ef3c50bfc1a8b",
+      "status": "reject",
+      "reason": "unsafe entry name"
+    },
+    {
+      "name": "basic.docm",
+      "expected": "ok",
+      "sha256": "de764e0ae8a8866dd38bbb9dc1cf342f8c1a25f9f57a07622288a09bf7212fbb",
+      "status": "ok",
+      "info": {
+        "family": "WORD",
+        "variant": "macro",
+        "hasMacros": true,
+        "entryCount": 18,
+        "uncompressedBytes": 827350,
+        "externalRelationships": 0
+      }
+    },
+    {
+      "name": "basic.docx",
+      "expected": "ok",
+      "sha256": "d909dee7f0f153521920651e01857d2171682ebbb2dde87e6924de404bb9481e",
+      "status": "ok",
+      "info": {
+        "family": "WORD",
+        "variant": "standard",
+        "hasMacros": false,
+        "entryCount": 17,
+        "uncompressedBytes": 827274,
+        "externalRelationships": 0
+      }
+    },
+    {
+      "name": "basic.dotx",
+      "expected": "ok",
+      "sha256": "c48797614e1db100a4d89c507eb266bf45470b23710b997489c25bc211ab567c",
+      "status": "ok",
+      "info": {
+        "family": "WORD",
+        "variant": "template",
+        "hasMacros": false,
+        "entryCount": 17,
+        "uncompressedBytes": 827274,
+        "externalRelationships": 0
+      }
+    },
+    {
+      "name": "basic.potx",
+      "expected": "ok",
+      "sha256": "1d35ba06ee7264cbafa8b0d385aee8b5a4894e482077a685eab1cb085ab31717",
+      "status": "ok",
+      "info": {
+        "family": "POWERPOINT",
+        "variant": "template",
+        "hasMacros": false,
+        "entryCount": 40,
+        "uncompressedBytes": 97035,
+        "externalRelationships": 0
+      }
+    },
+    {
+      "name": "basic.pptm",
+      "expected": "ok",
+      "sha256": "7242daf3cc8c634c6d69c116efbd1781b20b5d9dc629a01848a9bacb653d932d",
+      "status": "ok",
+      "info": {
+        "family": "POWERPOINT",
+        "variant": "macro",
+        "hasMacros": true,
+        "entryCount": 41,
+        "uncompressedBytes": 97123,
+        "externalRelationships": 0
+      }
+    },
+    {
+      "name": "basic.pptx",
+      "expected": "ok",
+      "sha256": "2d4f71d0bdd2ed06366fc3edb5654a67489af157e29a3f0cc31b282e871557f2",
+      "status": "ok",
+      "info": {
+        "family": "POWERPOINT",
+        "variant": "standard",
+        "hasMacros": false,
+        "entryCount": 40,
+        "uncompressedBytes": 97039,
+        "externalRelationships": 0
+      }
+    },
+    {
+      "name": "basic.xlsm",
+      "expected": "ok",
+      "sha256": "499e787ff049b10b2068fa0c2870525d2097ad9e0f76601d509916863431da4c",
+      "status": "ok",
+      "info": {
+        "family": "EXCEL",
+        "variant": "macro",
+        "hasMacros": true,
+        "entryCount": 10,
+        "uncompressedBytes": 26797,
+        "externalRelationships": 0
+      }
+    },
+    {
+      "name": "basic.xlsx",
+      "expected": "ok",
+      "sha256": "ddd88ce0cdc93d03935e6d686fdccbed2e96a38f63aab42b455462d4ace9310c",
+      "status": "ok",
+      "info": {
+        "family": "EXCEL",
+        "variant": "standard",
+        "hasMacros": false,
+        "entryCount": 9,
+        "uncompressedBytes": 26717,
+        "externalRelationships": 0
+      }
+    },
+    {
+      "name": "basic.xltx",
+      "expected": "ok",
+      "sha256": "5f151cc92d31a30c665763c674fe1db184995c29dc10d5547de8226cecc2d35f",
+      "status": "ok",
+      "info": {
+        "family": "EXCEL",
+        "variant": "template",
+        "hasMacros": false,
+        "entryCount": 9,
+        "uncompressedBytes": 26720,
+        "externalRelationships": 0
+      }
+    },
+    {
+      "name": "corrupt.pptx",
+      "expected": "reject",
+      "sha256": "cced75c9f73ab89a1fbba7fd6d103bd9df31b0cf0c4cc35bd48e35f8ccf9dc59",
+      "status": "reject",
+      "reason": "File is not a zip file"
+    },
+    {
+      "name": "empty.xlsx",
+      "expected": "reject",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "status": "reject",
+      "reason": "empty package"
+    },
+    {
+      "name": "external-rel.docx",
+      "expected": "ok",
+      "sha256": "2dc397bf1b019d971a3a71ee05785d96661efc2c001e5f5fe5d93e0bdc5fb90a",
+      "status": "ok",
+      "info": {
+        "family": "WORD",
+        "variant": "standard",
+        "hasMacros": false,
+        "entryCount": 17,
+        "uncompressedBytes": 826343,
+        "externalRelationships": 1
+      }
+    },
+    {
+      "name": "large.xlsx",
+      "expected": "ok",
+      "sha256": "0f4c9ac0db4d6ca06507207ed1d36a2f9063615509f60ab5afbd146313dfc3ed",
+      "status": "ok",
+      "info": {
+        "family": "EXCEL",
+        "variant": "standard",
+        "hasMacros": false,
+        "entryCount": 9,
+        "uncompressedBytes": 1778049,
+        "externalRelationships": 0
+      }
+    },
+    {
+      "name": "misleading.pdf",
+      "expected": "ok",
+      "sha256": "d909dee7f0f153521920651e01857d2171682ebbb2dde87e6924de404bb9481e",
+      "status": "ok",
+      "info": {
+        "family": "WORD",
+        "variant": "standard",
+        "hasMacros": false,
+        "entryCount": 17,
+        "uncompressedBytes": 827274,
+        "externalRelationships": 0
+      }
+    },
+    {
+      "name": "poi/poi-51187.pptx",
+      "expected": "ok",
+      "sha256": "a1728e7e6c4cf6470fd2d5cf044b6db008ddb75f512c390ab5bc71bbcf37a909",
+      "status": "ok",
+      "info": {
+        "family": "POWERPOINT",
+        "variant": "standard",
+        "hasMacros": false,
+        "entryCount": 53,
+        "uncompressedBytes": 128782,
+        "externalRelationships": 0
+      }
+    },
+    {
+      "name": "poi/poi-60158.docm",
+      "expected": "ok",
+      "sha256": "51377b41d9843b9418ef27be036fdbe74fa13c1dfa2b2a501191b1a24ca586b0",
+      "status": "ok",
+      "info": {
+        "family": "WORD",
+        "variant": "macro",
+        "hasMacros": true,
+        "entryCount": 14,
+        "uncompressedBytes": 43961,
+        "externalRelationships": 0
+      }
+    },
+    {
+      "name": "poi/poi-60316.dotx",
+      "expected": "ok",
+      "sha256": "e21a1c1e7c1f30176bf03e5228282750afd6a6708f6706eb9906c6254c08fbae",
+      "status": "ok",
+      "info": {
+        "family": "WORD",
+        "variant": "template",
+        "hasMacros": false,
+        "entryCount": 34,
+        "uncompressedBytes": 234282,
+        "externalRelationships": 0
+      }
+    },
+    {
+      "name": "poi/poi-invalid.xlsx",
+      "expected": "reject",
+      "sha256": "8739c76e681f900923b900c9df0ef75cf421d39cabb54650c4b9ad19b6a76d85",
+      "status": "reject",
+      "reason": "invalid entry count"
+    },
+    {
+      "name": "poi/poi-sample.docx",
+      "expected": "ok",
+      "sha256": "54c8f2157d6ab461f3284982f9d5b04bfdbc17308caeb6c567783ceb6121297a",
+      "status": "ok",
+      "info": {
+        "family": "WORD",
+        "variant": "standard",
+        "hasMacros": false,
+        "entryCount": 12,
+        "uncompressedBytes": 39579,
+        "externalRelationships": 0
+      }
+    },
+    {
+      "name": "poi/poi-sample.xlsx",
+      "expected": "ok",
+      "sha256": "7c2c5d2593f93945f26b826d6a2c3a6d1eaafe57ecb6e8b4813df72f909996b0",
+      "status": "ok",
+      "info": {
+        "family": "EXCEL",
+        "variant": "standard",
+        "hasMacros": false,
+        "entryCount": 19,
+        "uncompressedBytes": 24506,
+        "externalRelationships": 0
+      }
+    },
+    {
+      "name": "poi/poi-suffix.xlsm",
+      "expected": "ok",
+      "sha256": "8108853394e1ab8964f13d0ee81c122ebabd0c5587a9dfeb934340e7a8d333f1",
+      "status": "ok",
+      "info": {
+        "family": "EXCEL",
+        "variant": "macro",
+        "hasMacros": true,
+        "entryCount": 16,
+        "uncompressedBytes": 93361,
+        "externalRelationships": 0
+      }
+    },
+    {
+      "name": "rich.docx",
+      "expected": "ok",
+      "sha256": "63dce6fab591076ba07dd2327d2dddcf6e2a90f897a02ca2342ff7cd755e8565",
+      "status": "ok",
+      "info": {
+        "family": "WORD",
+        "variant": "standard",
+        "hasMacros": false,
+        "entryCount": 18,
+        "uncompressedBytes": 838733,
+        "externalRelationships": 0
+      }
+    },
+    {
+      "name": "rich.pptx",
+      "expected": "ok",
+      "sha256": "14d34272c872c8da6290130379c2d1bbbe972b1f1b2c3a3bdf1b2eb2ca3814c2",
+      "status": "ok",
+      "info": {
+        "family": "POWERPOINT",
+        "variant": "standard",
+        "hasMacros": false,
+        "entryCount": 53,
+        "uncompressedBytes": 111611,
+        "externalRelationships": 0
+      }
+    },
+    {
+      "name": "rich.xlsx",
+      "expected": "ok",
+      "sha256": "b2e2ddeb1fe15a0500ca24cee5537c275920af6721f83b0c5770bfff30e0510c",
+      "status": "ok",
+      "info": {
+        "family": "EXCEL",
+        "variant": "standard",
+        "hasMacros": false,
+        "entryCount": 21,
+        "uncompressedBytes": 67708,
+        "externalRelationships": 0
+      }
+    },
+    {
+      "name": "truncated.docx",
+      "expected": "reject",
+      "sha256": "a26bbfa0305d6347cdd965850603e483d28e97bfa548b0546303df142c8fa047",
+      "status": "reject",
+      "reason": "File is not a zip file"
+    },
+    {
+      "name": "zip-bomb.docx",
+      "expected": "reject",
+      "sha256": "5ad0d27580efd6eef08b183aff6588aec9f541e57612edf396afd9e22f28121f",
+      "status": "reject",
+      "reason": "invalid main content type"
+    }
+  ]
+}

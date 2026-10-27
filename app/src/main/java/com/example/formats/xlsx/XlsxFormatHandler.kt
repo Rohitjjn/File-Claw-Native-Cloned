@@ -5,28 +5,17 @@ import com.example.domain.preview.FormatCapability
 import com.example.domain.preview.FormatOpenRequest
 import com.example.domain.preview.FormatOperationResult
 import com.example.domain.preview.FormatSaveRequest
+import com.example.formats.ooxml.OoxmlPackageInspector
 import com.example.formats.registry.StaticFormatHandler
 import com.example.formats.registry.capabilities
-import java.io.IOException
 
 /**
- * XLSX preview handler, with a light-edit save for single-sheet workbooks.
+ * XLSX preview handler with a values-only light-edit save for safe workbooks.
  *
- * Issue 2 fix ("Excel file crashes the app as soon as it opens"): [open] used to let any
- * failure from [XlsxWorkbookLoader] propagate uncaught past this point. The view-model's
- * own try/catch around the whole open pipeline only catches Exception and
- * OutOfMemoryError specifically; a handful of other crash classes this kind of library
- * can realistically throw on a real device (e.g. LinkageError/NoClassDefFoundError if a
- * transitive XML dependency ever fails to resolve, StackOverflowError on a pathologically
- * nested file, or a plain RuntimeException from the parser on a malformed workbook) are
- * not Exception subtypes and were never caught anywhere, crashing the whole app instead
- * of showing an error screen. Every failure here is now caught and turned into a normal,
- * retryable FileContentState.Error.
- *
- * Multi-sheet workbooks stay view-only (only the first sheet is ever shown, so saving
- * could silently drop the others); a single-sheet workbook can be lightly edited and saved
- * back, matching CSV's "values only" editing tier -- no formulas, styling, column widths
- * or merged cells are preserved.
+ * The package is validated before the third-party parser starts. Editing is
+ * offered only for a complete, bounded, single-sheet, non-macro workbook;
+ * saving a partial view, a template, or a macro-enabled workbook could
+ * otherwise silently discard content the viewer never showed.
  */
 class XlsxFormatHandler : StaticFormatHandler(
     formatIds = FORMAT_IDS,
@@ -35,38 +24,51 @@ class XlsxFormatHandler : StaticFormatHandler(
     }
 ) {
     override suspend fun open(request: FormatOpenRequest): FileContentState {
+        val inspection = try {
+            OoxmlPackageInspector.inspect(request.file)
+        } catch (error: OoxmlPackageInspector.InvalidPackageException) {
+            return FileContentState.Error(error.message ?: "Could not open this Excel file.")
+        }
+        if (inspection.family != OoxmlPackageInspector.Family.EXCEL) {
+            return FileContentState.Error("The file content does not match its Excel workbook type.")
+        }
+
         val workbook = try {
             XlsxWorkbookLoader.load(request.file)
         } catch (error: OutOfMemoryError) {
-            return FileContentState.Error(
-                "This Excel file is too large to preview on this device (ran out of memory)."
-            )
-        } catch (error: IOException) {
-            return FileContentState.Error(error.message ?: "Could not read this Excel file.")
-        } catch (error: Throwable) {
-            // Deliberately broad: any unexpected failure from the third-party reader
-            // becomes a recoverable error screen instead of taking the whole app down.
-            return FileContentState.Error(
-                "Could not open this Excel file" + (error.message?.let { ": $it" } ?: ".")
-            )
+            return FileContentState.Error("This Excel file is too large to preview on this device (ran out of memory).")
+        } catch (_: Exception) {
+            return FileContentState.Error("Could not read this Excel file. It may be damaged or unsupported.")
+        } catch (_: Throwable) {
+            // Deliberately broad: a third-party parser failure becomes a retryable
+            // error screen rather than taking down the app process.
+            return FileContentState.Error("Could not open this Excel file.")
         }
 
+        val variantIsReadOnly = inspection.hasMacros ||
+            inspection.variant == OoxmlPackageInspector.Variant.TEMPLATE ||
+            inspection.variant == OoxmlPackageInspector.Variant.MACRO_TEMPLATE
         val singleSheet = workbook.sheetCount <= 1
-        val reason = when {
-            workbook.sheetCount > 1 ->
-                "Showing sheet \"${workbook.sheetName}\" (1 of ${workbook.sheetCount}). " +
-                    "Editing is disabled for multi-sheet workbooks so the other sheets are never lost."
-            workbook.truncated ->
-                "This sheet is larger than the preview can show in full, so editing is disabled."
-            else -> null
+        val reasons = mutableListOf<String>()
+        inspection.notice?.let(reasons::add)
+        if (workbook.sheetCount > 1) {
+            reasons += "Showing sheet \"${workbook.sheetName}\" (1 of ${workbook.sheetCount}). " +
+                "Other sheets are not shown, so editing is disabled."
         }
+        if (workbook.truncated) {
+            reasons += "This sheet exceeds the safe preview limit, so editing is disabled."
+        }
+        if (variantIsReadOnly) {
+            reasons += "This workbook variant is read-only because a values-only save would discard its package features."
+        }
+
         return FileContentState.CsvSuccess(
             rows = workbook.rows,
             file = request.fileEntity,
             truncated = workbook.truncated,
-            readOnlyReason = reason,
+            readOnlyReason = reasons.joinToString(" ").takeIf { it.isNotBlank() },
             table = null,
-            spreadsheetEditable = singleSheet && !workbook.truncated,
+            spreadsheetEditable = singleSheet && !workbook.truncated && !variantIsReadOnly,
             sheetName = workbook.sheetName
         )
     }
@@ -81,7 +83,7 @@ class XlsxFormatHandler : StaticFormatHandler(
         } catch (error: OutOfMemoryError) {
             FormatOperationResult.Failed("Ran out of memory while saving this Excel file.")
         } catch (error: Throwable) {
-            FormatOperationResult.Failed(error.message ?: "Could not save this Excel file")
+            FormatOperationResult.Failed(error.message?.take(180) ?: "Could not save this Excel file.")
         }
     }
 

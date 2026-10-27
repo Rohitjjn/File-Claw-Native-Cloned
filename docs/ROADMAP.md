@@ -1,10 +1,10 @@
 # Current work sequence
 
-This is a verification sequence, not a promise of future product features.
+This is the verification sequence for the completed Office preview repair/expansion pass, not a promise of additional product features.
 
-1. **Complete the existing preview repair gate.** Run the Kotlin/Gradle checks on JDK 17 + SDK 34, then open existing PDF and DOCX examples in an Android WebView. The current MIME handler change is not runtime-confirmed yet.
-2. **Confirm app regression behavior.** Use [`SANITY_CHECKLIST.md`](SANITY_CHECKLIST.md) to check external file opening, editing/saving, archives, search, print/share, Room migration behavior, and themes. Record failures rather than inferring success from source.
-3. **Update documentation only from evidence.** Keep [`STATUS.md`](STATUS.md), [`FILE_FORMATS.md`](FILE_FORMATS.md), and [`DATABASE.md`](DATABASE.md) aligned with implementation and observed tests.
-4. **Only after the gate passes**, discuss any further architecture or product work with the user. A new format or preview engine requires separate scope approval.
+1. **Observe CI.** Confirm the final commit's `Office Renderer Tests` and `Android Build Verification` workflow results on the pull request. Fix failures with focused commits; do not weaken tests or security limits.
+2. **Complete Android runtime verification.** On JDK 17 + SDK 34, run focused Gradle gates, install the APK on an emulator/device, and exercise [`SANITY_CHECKLIST.md`](SANITY_CHECKLIST.md) for PDF, DOCX, XLSX, PPTX, legacy Office, variants, external intents, archive entries, themes, print/share and safe save.
+3. **Record evidence.** Update [`STATUS.md`](STATUS.md), [`TESTING.md`](TESTING.md), [`PERFORMANCE.md`](../PERFORMANCE.md) and [`CHANGELOG.md`](CHANGELOG.md) with exact commands, pass/fail counts, CI URL, device/WebView version and measured memory/timing where available.
+4. **Address remaining gaps deliberately.** The general archive aggregate cap, Android WebView fuzzing, full legacy binary layout and full-fidelity Office editing are separate scoped tasks. Do not claim them as complete.
 
-No version bump, new module, dependency change, database migration, or new preview capability is planned by this document.
+No version bump, new Gradle module, application-ID/SDK change, database migration or remote document service is introduced by this sequence.

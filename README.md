@@ -44,3 +44,7 @@ The expected output path is `app/build/outputs/apk/debug/app-debug.apk`. For com
 - `app/src/test/` contains local JVM unit tests. There is currently no `app/src/androidTest/` test suite.
 
 Read [AGENTS.md](AGENTS.md) before making code changes. Browse the [documentation index](docs/README.md) or the [source-verified architecture map](docs/ARCHITECTURE.md).
+
+## Office preview verification
+
+Microsoft Office support, read-only/editing boundaries and known limitations are recorded in [Supported formats](docs/FILE_FORMATS.md) and [Preview pipelines](docs/PREVIEW_PIPELINES.md). The offline renderer regression suite, plain-JVM OOXML inspector harness and legally reusable test fixtures live in [`tools/office-preview-tests/`](tools/office-preview-tests/README.md). The browser/validator suite runs with Node 20+ and Python 3.11+; the JVM harness uses JDK 17 and Kotlin compiler 1.9.22. Full Gradle and Android-device checks are still required before an app release.

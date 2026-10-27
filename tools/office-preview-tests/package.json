@@ -1,0 +1,18 @@
+{
+  "name": "file-claw-office-renderer-tests",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Headless Chromium regression tests for File Claw's bundled Office preview assets.",
+  "scripts": {
+    "syntax": "node syntax-check.mjs",
+    "test": "node --test renderer.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@sparticuz/chromium": "153.0.0",
+    "puppeteer-core": "25.16.0"
+  }
+}
