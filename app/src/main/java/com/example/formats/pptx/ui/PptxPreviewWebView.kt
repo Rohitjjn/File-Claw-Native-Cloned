@@ -7,6 +7,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import com.example.data.RecentFileEntity
 import com.example.viewmodel.MainViewModel
 import androidx.compose.ui.platform.LocalContext
@@ -172,12 +173,12 @@ fun PptxPreviewWebView(
             }
         } else {
             Column(
-                modifier = Modifier.fillMaxSize().padding(24.dp),
+                modifier = Modifier.fillMaxSize().padding(androidx.compose.ui.unit.Dp(24f)),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
                 Text(loadError.orEmpty(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(androidx.compose.ui.unit.Dp(12f)))
                 Button(onClick = {
                     loadError = null
                     isWebViewLoading = true
