@@ -63,7 +63,7 @@ fun CsvPreview(
         if (row < 0 || row >= SpreadsheetGridPayload.MAX_ROWS ||
             column < 0 || column >= SpreadsheetGridPayload.MAX_COLUMNS
         ) return
-        val next = draftRows.map { it.toMutableList() }
+        val next: MutableList<MutableList<String>> = draftRows.map { it.toMutableList() }.toMutableList()
         val targetWidth = maxOf((next.maxOfOrNull { it.size } ?: 0), column + 1)
         while (next.size <= row) next.add(MutableList(targetWidth) { "" })
         while (next[row].size <= column) next[row].add("")

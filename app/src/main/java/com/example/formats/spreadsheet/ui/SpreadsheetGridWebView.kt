@@ -17,6 +17,7 @@ import com.example.formats.spreadsheet.SpreadsheetGridPayload
 import com.example.platform.webview.MimeAwareAssetsPathHandler
 import java.io.ByteArrayInputStream
 import kotlin.math.abs
+import kotlinx.coroutines.isActive
 
 /**
  * Shared bounded spreadsheet grid used by CSV/TSV and XLSX previews.

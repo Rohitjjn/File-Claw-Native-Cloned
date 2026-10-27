@@ -17,6 +17,7 @@ import com.example.platform.webview.MimeAwareAssetsPathHandler
 import com.example.viewmodel.MainViewModel
 import java.io.File
 import kotlin.math.abs
+import kotlinx.coroutines.isActive
 
 /**
  * Offline PPTX preview over the existing bundled pptx-preview engine.
